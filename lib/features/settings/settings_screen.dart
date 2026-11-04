@@ -9,12 +9,6 @@ import '../bridge/presentation/bridge_controller.dart';
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  void _notReady(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings become editable in Phase 1')),
-    );
-  }
-
   Future<void> _showBridgeLogs(BuildContext context, WidgetRef ref) async {
     await ref.read(bridgeControllerProvider.notifier).refresh();
     if (!context.mounted) {
@@ -66,9 +60,9 @@ class SettingsScreen extends ConsumerWidget {
               _Tile(
                 icon: Icons.bolt_outlined,
                 title: 'AGY',
-                subtitle: 'gRPC language server agent',
-                trailing: 'Not configured',
-                onTap: () => _notReady(context),
+                subtitle: 'Antigravity (Gemini) runtime and sign-in',
+                trailing: 'Open',
+                onTap: () => context.push('/agy'),
               ),
             ],
           ),

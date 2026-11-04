@@ -43,4 +43,14 @@ class BridgeChannel {
   Future<void> openUrl(String url) async {
     await _channel.invokeMethod<void>('openUrl', {'url': url});
   }
+
+  Future<Map<String, Object?>> agyStatus() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>('agyStatus');
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<Map<String, Object?>> agyInstall() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>('agyInstall');
+    return result?.cast<String, Object?>() ?? const {};
+  }
 }

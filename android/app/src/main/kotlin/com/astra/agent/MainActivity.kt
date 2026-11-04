@@ -9,6 +9,7 @@ import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
     private val bridgeExecutor = Executors.newSingleThreadExecutor()
+    private val installExecutor = Executors.newSingleThreadExecutor()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -63,6 +64,25 @@ class MainActivity : FlutterActivity() {
                                 result.success(true)
                             } catch (error: Exception) {
                                 result.error("open_failed", error.message, null)
+                            }
+                        }
+                    }
+
+                    "agyStatus" -> {
+                        try {
+                            result.success(AgyRuntime.status(applicationContext))
+                        } catch (error: Exception) {
+                            result.error("agy_status_failed", error.message, null)
+                        }
+                    }
+
+                    "agyInstall" -> installExecutor.execute {
+                        try {
+                            val status = AgyRuntime.install(applicationContext)
+                            runOnUiThread { result.success(status) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error("agy_install_failed", error.message, null)
                             }
                         }
                     }

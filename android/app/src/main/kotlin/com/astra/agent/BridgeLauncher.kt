@@ -48,6 +48,7 @@ object BridgeLauncher {
             ?: tokenLocked(context)
         val binary = ensureBinary(context)
         val claudeBin = ClaudeRuntime.ensure(context)
+        val agyBin = AgyRuntime.ensureWrapper(context)
         val home = File(context.filesDir, "home").apply { mkdirs() }
         val projects = File(home, "projects").apply { mkdirs() }
         val tmp = File(context.filesDir, "tmp").apply { mkdirs() }
@@ -61,10 +62,9 @@ object BridgeLauncher {
         workDir.mkdirs()
 
         val tzOffset = TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000
-        val command = listOf(
+        val command = mutableListOf(
             binary.absolutePath,
             "-f",
-            "--no-hub",
             "--claude-bin",
             claudeBin,
             "--token",
@@ -78,6 +78,12 @@ object BridgeLauncher {
             "--dir",
             workDir.absolutePath,
         )
+        if (agyBin != null) {
+            command.add("--bin")
+            command.add(agyBin)
+        } else {
+            command.add("--no-hub")
+        }
 
         val builder = ProcessBuilder(command)
             .directory(workDir)

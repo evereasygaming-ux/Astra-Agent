@@ -1,0 +1,328 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/theme/app_theme.dart';
+import '../../bridge/presentation/bridge_controller.dart';
+import 'agy_controller.dart';
+
+class AgyScreen extends ConsumerStatefulWidget {
+  const AgyScreen({super.key});
+
+  @override
+  ConsumerState<AgyScreen> createState() => _AgyScreenState();
+}
+
+class _AgyScreenState extends ConsumerState<AgyScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(agyControllerProvider.notifier).refresh();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final agy = ref.watch(agyControllerProvider);
+    final bridge = ref.watch(bridgeControllerProvider);
+    final busy = agy.loading || agy.installing;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('AGY'),
+        actions: [
+          IconButton(
+            onPressed: agy.loading
+                ? null
+                : () => ref.read(agyControllerProvider.notifier).refresh(),
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        children: [
+          if (!bridge.isRunning)
+            _Panel(
+              color: AppTheme.accentAlt.withValues(alpha: 0.10),
+              borderColor: AppTheme.accentAlt.withValues(alpha: 0.25),
+              child: Row(
+                children: [
+                  const Icon(Icons.hub_outlined, color: AppTheme.accentAlt),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'The local bridge is offline. Start it from Home first.',
+                      style: TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        ref.read(bridgeControllerProvider.notifier).toggle(),
+                    child: const Text('Start'),
+                  ),
+                ],
+              ),
+            ),
+          if (!bridge.isRunning) const SizedBox(height: 16),
+          _RuntimePanel(agy: agy, enabled: !busy),
+          const SizedBox(height: 16),
+          _HubPanel(agy: agy, enabled: bridge.isRunning && !busy),
+          if (agy.error != null) ...[
+            const SizedBox(height: 16),
+            _Panel(
+              color: Theme.of(context).colorScheme.error.withValues(alpha: 0.10),
+              borderColor: Theme.of(context).colorScheme.error.withValues(alpha: 0.25),
+              child: Text(
+                agy.error!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          const Text(
+            'AGY is the Antigravity (Gemini) agent. It runs locally through the '
+            'embedded Go bridge and the bundled glibc runtime.',
+            style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuntimePanel extends ConsumerWidget {
+  const _RuntimePanel({required this.agy, required this.enabled});
+
+  final AgyState agy;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final runtime = agy.runtime;
+    final installed = runtime?.installed == true;
+    final sizeMb = ((runtime?.size ?? 0) / (1024 * 1024)).toStringAsFixed(0);
+
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.bolt, color: AppTheme.accent),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Runtime',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (agy.loading)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                _Pill(
+                  text: installed ? 'Installed' : 'Not installed',
+                  color: installed ? AppTheme.accent : AppTheme.muted,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            installed
+                ? 'Daemon • $sizeMb MB\n${runtime?.path ?? ''}'
+                : 'Install the AGY daemon to start using Gemini models.',
+            style: const TextStyle(
+              color: AppTheme.muted,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: enabled
+                  ? () => ref.read(agyControllerProvider.notifier).install()
+                  : null,
+              icon: agy.installing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(
+                      installed ? Icons.system_update_alt : Icons.download,
+                      size: 18,
+                    ),
+              label: Text(
+                agy.installing
+                    ? 'Downloading…'
+                    : installed
+                        ? 'Reinstall runtime'
+                        : 'Install runtime',
+              ),
+            ),
+          ),
+          if (agy.installing)
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Text(
+                'This downloads ~180 MB. Keep the app open until it finishes.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 11),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HubPanel extends ConsumerWidget {
+  const _HubPanel({required this.agy, required this.enabled});
+
+  final AgyState agy;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hub = agy.hub;
+    final online = hub?.online == true;
+    final status = hub?.status ?? 'stopped';
+
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.account_circle_outlined, color: AppTheme.accent),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Account & hub',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (agy.loading)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                _Pill(
+                  text: online ? 'Online' : status,
+                  color: online ? AppTheme.accent : AppTheme.muted,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            online
+                ? 'Hub is online. Sign-in is managed by Google.'
+                : 'The hub is $status. Restart the bridge after installing the runtime, then sign in.',
+            style: const TextStyle(
+              color: AppTheme.muted,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+          if (hub?.error != null && hub!.error!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              hub.error!,
+              style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+            ),
+          ],
+          const SizedBox(height: 14),
+          if (agy.loginUrl?.url != null && agy.loginUrl!.url!.isNotEmpty)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: enabled
+                    ? () => ref.read(agyControllerProvider.notifier).openLoginUrl()
+                    : null,
+                icon: const Icon(Icons.open_in_browser, size: 18),
+                label: const Text('Open sign-in page'),
+              ),
+            ),
+          if (agy.loginUrl?.url != null && agy.loginUrl!.url!.isNotEmpty)
+            const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: enabled
+                  ? () => ref.read(agyControllerProvider.notifier).startLogin()
+                  : null,
+              icon: const Icon(Icons.login, size: 18),
+              label: const Text('Sign in with Google'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Panel extends StatelessWidget {
+  const _Panel({required this.child, this.color, this.borderColor});
+
+  final Widget child;
+  final Color? color;
+  final Color? borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color ?? AppTheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: borderColor ?? Colors.white.withValues(alpha: 0.06),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
