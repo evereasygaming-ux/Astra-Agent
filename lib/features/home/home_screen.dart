@@ -1,11 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/app_info.dart';
+import '../bridge/domain/bridge_status.dart';
+import '../bridge/presentation/bridge_controller.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final status = ref.read(bridgeControllerProvider);
+      if (status.phase == BridgePhase.stopped) {
+        ref.read(bridgeControllerProvider.notifier).start();
+      }
+    });
+  }
 
   void _comingSoon(BuildContext context, String feature) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -15,6 +37,13 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bridge = ref.watch(bridgeControllerProvider);
+    final bridgeColor = switch (bridge.phase) {
+      BridgePhase.running => AppTheme.accent,
+      BridgePhase.error => Theme.of(context).colorScheme.error,
+      _ => AppTheme.muted,
+    };
+
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -26,9 +55,9 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 24),
             _SectionTitle(title: 'Status'),
             const SizedBox(height: 12),
-            const Row(
+            Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: _StatusTile(
                     icon: Icons.smart_toy_outlined,
                     label: 'Agent',
@@ -36,17 +65,31 @@ class HomeScreen extends StatelessWidget {
                     color: AppTheme.accentAlt,
                   ),
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Expanded(
                   child: _StatusTile(
                     icon: Icons.hub_outlined,
                     label: 'Bridge',
-                    value: 'Offline',
-                    color: AppTheme.accent,
+                    value: bridge.label,
+                    color: bridgeColor,
+                    onTap: () =>
+                        ref.read(bridgeControllerProvider.notifier).toggle(),
                   ),
                 ),
               ],
             ),
+            if (bridge.error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                bridge.error!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             _SectionTitle(title: 'Workspace'),
             const SizedBox(height: 12),
@@ -196,7 +239,7 @@ class _HeroCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
             ),
             child: const Text(
-              'PHASE 0 • SCAFFOLD',
+              'PHASE 1 • BRIDGE',
               style: TextStyle(
                 fontSize: 10,
                 letterSpacing: 1.2,
@@ -254,16 +297,18 @@ class _StatusTile extends StatelessWidget {
     required this.label,
     required this.value,
     required this.color,
+    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final tile = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surface,
@@ -286,6 +331,15 @@ class _StatusTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    if (onTap == null) {
+      return tile;
+    }
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: tile,
     );
   }
 }

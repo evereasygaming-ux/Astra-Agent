@@ -39,6 +39,12 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Generated bridge binaries
+/android/app/src/main/assets/bin/agy_ide_bridge
+/bridge/agy_ide_bridge_android
+/android/build/
+/android/app/build/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/app_info.dart';
+import '../bridge/presentation/bridge_controller.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   void _notReady(BuildContext context) {
@@ -12,8 +14,39 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _showBridgeLogs(BuildContext context, WidgetRef ref) async {
+    await ref.read(bridgeControllerProvider.notifier).refresh();
+    if (!context.mounted) {
+      return;
+    }
+    final log = ref.read(bridgeControllerProvider).log;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Bridge logs'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 420),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              log.isEmpty ? 'No logs yet.' : log,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bridge = ref.watch(bridgeControllerProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
@@ -40,22 +73,45 @@ class SettingsScreen extends StatelessWidget {
           ),
           _Section(
             title: 'Bridge',
-            children: const [
+            children: [
               _Tile(
+                icon: Icons.power_settings_new,
+                title: 'Local bridge',
+                subtitle: bridge.isRunning
+                    ? 'PID ${bridge.pid} • ${bridge.healthVersion ?? 'healthy'}'
+                    : bridge.error ?? 'Tap to start',
+                trailing: bridge.label,
+                onTap: () =>
+                    ref.read(bridgeControllerProvider.notifier).toggle(),
+              ),
+              const _Tile(
                 icon: Icons.lan_outlined,
                 title: 'Host',
                 subtitle: AppInfo.bridgeHost,
               ),
-              _Tile(
+              const _Tile(
                 icon: Icons.settings_ethernet,
                 title: 'Ports',
                 subtitle:
                     'Bridge ${AppInfo.bridgePort}  •  Hub ${AppInfo.hubPort}',
               ),
-              _Tile(
+              const _Tile(
                 icon: Icons.key_outlined,
                 title: 'Access token',
                 subtitle: 'Generated on first launch',
+              ),
+              _Tile(
+                icon: Icons.receipt_long_outlined,
+                title: 'View logs',
+                subtitle: 'Bridge stdout and stderr',
+                onTap: () => _showBridgeLogs(context, ref),
+              ),
+              _Tile(
+                icon: Icons.delete_sweep_outlined,
+                title: 'Clear logs',
+                subtitle: 'Remove buffered bridge output',
+                onTap: () =>
+                    ref.read(bridgeControllerProvider.notifier).clearLogs(),
               ),
             ],
           ),

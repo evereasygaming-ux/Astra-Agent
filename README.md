@@ -1,17 +1,41 @@
-# astra_agent
+# AstraAgent
 
-A new Flutter project.
+Agentic AI coding workspace for Android. Built with Flutter, with an embedded
+Go bridge for Claude Code stream-json sessions.
 
-## Getting Started
+## Status
 
-This project is a starting point for a Flutter application.
+Phase 1: Go bridge packaging and lifecycle. Chat UI follows.
 
-A few resources to get you started if this is your first Flutter project:
+## Build
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Debug APKs are built by GitHub Actions (`.github/workflows/build-debug-apk.yml`):
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Go bridge cross-compiles for `android/arm64`
+- Flutter builds a debug APK for `arm64-v8a`
+- CI verifies `targetSdk 28`, `minSdk 24`, 16 KB alignment, and APK signature
+
+Local build:
+
+```bash
+flutter pub get
+flutter build apk --debug
+```
+
+The bridge binary is generated into
+`android/app/src/main/assets/bin/agy_ide_bridge` by CI or by:
+
+```bash
+cd bridge
+CGO_ENABLED=0 GOOS=android GOARCH=arm64 \
+  go build -buildmode=pie -trimpath -ldflags="-s -w" \
+  -o ../android/app/src/main/assets/bin/agy_ide_bridge .
+```
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See
+`LICENSE`.
+
+The embedded Go bridge in `bridge/` is derived from the antiGem project
+(`agy_ide_bridge`, GPLv3). Its original license is kept in `bridge/LICENSE`.
