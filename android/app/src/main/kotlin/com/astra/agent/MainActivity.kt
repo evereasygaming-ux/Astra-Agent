@@ -1,4 +1,4 @@
-package com.astra.astra_agent
+package com.astra.agent
 
 import io.flutter.embedding.android.FlutterActivity
 
