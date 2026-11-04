@@ -74,31 +74,31 @@ export PATH="$HOME/.local/bin:$PATH"
 PIDFILE="$HOME/.astra/bridge.pid"
 if [ -f "$PIDFILE" ]; then
   PID=$(cat "$PIDFILE" 2>/dev/null)
-  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null && \
+    tr '\0' ' ' <"/proc/$PID/cmdline" 2>/dev/null | grep -qF "$HOME/.local/bin/agy_ide_bridge"; then
     if [ "$1" != "--restart" ]; then
+      echo "AstraAgent bridge is already running (PID $PID)"
       exit 0
     fi
     kill "$PID" 2>/dev/null || true
-    sleep 1
+    for _ in 1 2 3 4 5; do
+      kill -0 "$PID" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$PID" 2>/dev/null; then
+      kill -9 "$PID" 2>/dev/null || true
+    fi
   fi
 fi
-nohup "$HOME/.local/bin/agy_ide_bridge" -f \
+echo $$ > "$PIDFILE"
+exec >> "$HOME/.astra/bridge.log" 2>&1
+exec "$HOME/.local/bin/agy_ide_bridge" -f \
   --token "$TOKEN" -p "$BRIDGE_PORT" --hub-port "$HUB_PORT" \
   --bin "$AGY_BIN" --claude-bin "$HOME/.local/bin/claude" --dir "$HOME" \
-  >> "$HOME/.astra/bridge.log" 2>&1 &
-echo $! > "$PIDFILE"
 ASTRA_EOF
 chmod 755 "$HOME/.astra/start-bridge.sh"
-"$HOME/.astra/start-bridge.sh" --restart
-
-sleep 3
-if curl -fsS "http://127.0.0.1:__BRIDGE_PORT__/api/health" >/dev/null; then
-  echo "AstraAgent bridge is running in Debian on port __BRIDGE_PORT__"
-else
-  echo "Bridge did not become healthy. Check ~/.astra/bridge.log"
-  exit 1
-fi
 echo "=== AstraAgent Debian proot setup finished ==="
+exec "$HOME/.astra/start-bridge.sh" --restart
 ''';
   return template
       .replaceAll('__TOKEN__', token)
@@ -107,14 +107,14 @@ echo "=== AstraAgent Debian proot setup finished ==="
       .replaceAll('__ASSET_PORT__', '$assetPort');
 }
 
-String buildLaunchScript() => r'''
+String buildLaunchScript({bool restart = false}) => r'''
 if [ -x "$HOME/.astra/start-bridge.sh" ]; then
-  "$HOME/.astra/start-bridge.sh"
+  exec "$HOME/.astra/start-bridge.sh"__RESTART__
 else
   echo "AstraAgent Debian setup has not run yet."
   exit 3
 fi
-''';
+'''.replaceAll('__RESTART__', restart ? ' --restart' : '');
 
 String buildBridgeConfigUpdateScript({
   required String token,
@@ -155,7 +155,7 @@ HUB_PORT=__HUB_PORT__
 AGY_BIN=$AGY_BIN
 ENV_EOF
 chmod 600 "$HOME/.astra/bridge.env"
-"$HOME/.astra/start-bridge.sh" --restart
+exec "$HOME/.astra/start-bridge.sh" --restart
 '''
       .replaceAll('__TOKEN__', token)
       .replaceAll('__BRIDGE_PORT__', '$bridgePort')
