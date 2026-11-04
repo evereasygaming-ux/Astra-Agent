@@ -69,7 +69,7 @@ object TermuxRunner {
             putExtra("com.termux.RUN_COMMAND_WORKDIR", TERMUX_HOME)
             putExtra("com.termux.RUN_COMMAND_BACKGROUND", background)
             if (!background) {
-                putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", 2)
+                putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0")
             }
         }
         context.startService(intent)
