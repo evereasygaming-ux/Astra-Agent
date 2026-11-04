@@ -1,0 +1,10 @@
+{
+  "version_code": 1,
+  "version_name": "0.1.0",
+  "changelog": [
+    "Initial AstraAgent Flutter scaffold",
+    "Package id com.astra.agent, minSdk 24, targetSdk 28",
+    "Debug APK build pipeline with Android 16 checks"
+  ],
+  "is_critical": false
+}

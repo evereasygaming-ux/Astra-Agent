@@ -1,0 +1,84 @@
+name: Build Debug APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: astraagent
+  FLUTTER_VERSION: "3.47.7"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Parse version
+        id: version
+        run: |
+          VERSION_NAME=$(python3 -c "import json;print(json.load(open('version.json'))['version_name'])")
+          VERSION_CODE=$(python3 -c "import json;print(json.load(open('version.json'))['version_code'])")
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build debug APK (arm64-v8a)
+        run: |
+          flutter build apk --debug \
+            --target-platform android-arm64 \
+            --build-name=${{ steps.version.outputs.name }} \
+            --build-number=${{ steps.version.outputs.code }}
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-debug.apk \
+            "dist/${APP_NAME}-v${{ steps.version.outputs.name }}-arm64-v8a-debug.apk"
+
+      - name: Verify Android 16 install safety
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BUILD_TOOLS=$(find "$SDK/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -1)
+          APK="dist/${APP_NAME}-v${{ steps.version.outputs.name }}-arm64-v8a-debug.apk"
+          BADGING=$("$BUILD_TOOLS/aapt2" dump badging "$APK")
+          echo "$BADGING" | grep -E "^(package|minSdkVersion|targetSdkVersion):"
+          echo "$BADGING" | grep -q "targetSdkVersion:'28'" \
+            || { echo "FAIL: targetSdk must be 28"; exit 1; }
+          echo "$BADGING" | grep -q "minSdkVersion:'24'" \
+            || { echo "FAIL: minSdk must be 24"; exit 1; }
+          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK" >/dev/null \
+            || { echo "FAIL: APK is not 16 KB zip-aligned"; exit 1; }
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK" >/dev/null \
+            || { echo "FAIL: APK signature invalid"; exit 1; }
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-debug-apk
+          path: dist/*
+          retention-days: 30

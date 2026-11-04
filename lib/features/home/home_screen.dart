@@ -1,0 +1,404 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../app/theme/app_theme.dart';
+import '../../core/constants/app_info.dart';
+
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  void _comingSoon(BuildContext context, String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$feature is coming in the next phase')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          children: [
+            _Header(onSettings: () => context.push('/settings')),
+            const SizedBox(height: 24),
+            const _HeroCard(),
+            const SizedBox(height: 24),
+            _SectionTitle(title: 'Status'),
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                Expanded(
+                  child: _StatusTile(
+                    icon: Icons.smart_toy_outlined,
+                    label: 'Agent',
+                    value: 'Not configured',
+                    color: AppTheme.accentAlt,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: _StatusTile(
+                    icon: Icons.hub_outlined,
+                    label: 'Bridge',
+                    value: 'Offline',
+                    color: AppTheme.accent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _SectionTitle(title: 'Workspace'),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.55,
+              children: [
+                _ActionCard(
+                  icon: Icons.chat_bubble_outline,
+                  title: 'Chat',
+                  subtitle: 'Claude Code',
+                  onTap: () => _comingSoon(context, 'Agent chat'),
+                ),
+                _ActionCard(
+                  icon: Icons.terminal,
+                  title: 'Terminal',
+                  subtitle: 'Linux PTY',
+                  onTap: () => _comingSoon(context, 'Terminal'),
+                ),
+                _ActionCard(
+                  icon: Icons.code,
+                  title: 'Editor',
+                  subtitle: 'Project files',
+                  onTap: () => _comingSoon(context, 'Editor'),
+                ),
+                _ActionCard(
+                  icon: Icons.public,
+                  title: 'Browser',
+                  subtitle: 'Localhost preview',
+                  onTap: () => _comingSoon(context, 'Browser'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _SectionTitle(title: 'Roadmap'),
+            const SizedBox(height: 12),
+            _RoadmapCard(
+              items: const [
+                'Claude Code chat over the Go bridge',
+                'AGY gRPC agent and model switching',
+                'Native terminal, editor and Git',
+                'Browser automation and MCP plugins',
+              ],
+            ),
+            const SizedBox(height: 24),
+            Center(
+              child: Text(
+                '${AppInfo.name} v${AppInfo.version}  •  ${AppInfo.packageId}',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.onSettings});
+
+  final VoidCallback onSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppTheme.accent, AppTheme.accentAlt],
+            ),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          alignment: Alignment.center,
+          child: const Text(
+            'A',
+            style: TextStyle(
+              color: Color(0xFF07101A),
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                AppInfo.name,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              Text(
+                AppInfo.tagline,
+                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: onSettings,
+          tooltip: 'Settings',
+          icon: const Icon(Icons.settings_outlined),
+        ),
+      ],
+    );
+  }
+}
+
+class _HeroCard extends StatelessWidget {
+  const _HeroCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.accent.withValues(alpha: 0.18),
+            AppTheme.accentAlt.withValues(alpha: 0.14),
+          ],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Text(
+              'PHASE 0 • SCAFFOLD',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.accent,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Agentic coding,\nright on your phone.',
+            style: TextStyle(
+              fontSize: 26,
+              height: 1.2,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Chat with coding agents, run a real Linux shell, edit files '
+            'and preview web apps without leaving Android.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.4,
+        color: AppTheme.muted,
+      ),
+    );
+  }
+}
+
+class _StatusTile extends StatelessWidget {
+  const _StatusTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icon, color: AppTheme.accent, size: 22),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoadmapCard extends StatelessWidget {
+  const _RoadmapCard({required this.items});
+
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: const TextStyle(
+                        color: AppTheme.accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      items[i],
+                      style: const TextStyle(fontSize: 13, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (i != items.length - 1)
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+          ],
+        ],
+      ),
+    );
+  }
+}
