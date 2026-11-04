@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,12 +13,12 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Chat'),
       300,
-      scrollableFinder: homeList,
+      scrollable: homeList,
     );
     await tester.scrollUntilVisible(
       find.text('Terminal'),
       300,
-      scrollableFinder: homeList,
+      scrollable: homeList,
     );
 
     expect(find.text('AstraAgent'), findsWidgets);
