@@ -9,6 +9,8 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: AstraAgentApp()));
     await tester.pumpAndSettle();
 
+    expect(find.text('AstraAgent'), findsOneWidget);
+
     final homeList = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(
       find.text('Chat'),
@@ -21,7 +23,6 @@ void main() {
       scrollable: homeList,
     );
 
-    expect(find.text('AstraAgent'), findsWidgets);
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Terminal'), findsOneWidget);
   });
