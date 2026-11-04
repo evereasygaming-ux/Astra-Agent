@@ -5,7 +5,12 @@ Go bridge for Claude Code stream-json sessions.
 
 ## Status
 
-Phase 1: Go bridge packaging and lifecycle. Chat UI follows.
+Phase 1: Go bridge packaging and lifecycle (done).
+
+Phase 2: Claude Code runtime. The app extracts a bundled glibc runtime and a
+`claude` wrapper from `android/app/src/main/assets`, then starts the bridge with
+`--claude-bin`. Claude Code itself is installed and authenticated from the
+in-app Claude screen.
 
 ## Build
 

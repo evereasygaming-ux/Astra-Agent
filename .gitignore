@@ -45,6 +45,9 @@ app.*.map.json
 /android/build/
 /android/app/build/
 
+# Kotlin/Gradle local caches
+/android/.kotlin/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

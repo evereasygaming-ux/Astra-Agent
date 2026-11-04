@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/app_info.dart';
@@ -58,9 +59,9 @@ class SettingsScreen extends ConsumerWidget {
               _Tile(
                 icon: Icons.smart_toy_outlined,
                 title: 'Claude Code',
-                subtitle: 'Stream-json agent over the local bridge',
-                trailing: 'Not configured',
-                onTap: () => _notReady(context),
+                subtitle: 'CLI runtime, account and sign-in',
+                trailing: 'Open',
+                onTap: () => context.push('/claude'),
               ),
               _Tile(
                 icon: Icons.bolt_outlined,

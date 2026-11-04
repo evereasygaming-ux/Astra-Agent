@@ -1,5 +1,7 @@
 package com.astra.agent
 
+import android.content.Intent
+import android.net.Uri
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -46,6 +48,23 @@ class MainActivity : FlutterActivity() {
                     "clearLogs" -> {
                         BridgeLauncher.clearLogs()
                         result.success(null)
+                    }
+
+                    "openUrl" -> {
+                        val url = call.argument<String>("url")
+                        if (url.isNullOrBlank()) {
+                            result.error("bad_url", "url is required", null)
+                        } else {
+                            try {
+                                startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                                result.success(true)
+                            } catch (error: Exception) {
+                                result.error("open_failed", error.message, null)
+                            }
+                        }
                     }
 
                     else -> result.notImplemented()

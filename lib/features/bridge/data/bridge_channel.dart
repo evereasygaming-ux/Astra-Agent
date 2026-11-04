@@ -39,4 +39,8 @@ class BridgeChannel {
   Future<void> clearLogs() async {
     await _channel.invokeMethod<void>('clearLogs');
   }
+
+  Future<void> openUrl(String url) async {
+    await _channel.invokeMethod<void>('openUrl', {'url': url});
+  }
 }

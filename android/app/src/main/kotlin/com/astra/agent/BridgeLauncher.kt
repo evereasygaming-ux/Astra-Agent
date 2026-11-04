@@ -29,6 +29,9 @@ object BridgeLauncher {
     private var port: Int = 1234
 
     @Volatile
+    private var processPid: Long = 0L
+
+    @Volatile
     private var lastError: String? = null
 
     fun start(
@@ -44,6 +47,7 @@ object BridgeLauncher {
             ?.takeIf { it.matches(Regex("^[0-9a-z]{12}$")) }
             ?: tokenLocked(context)
         val binary = ensureBinary(context)
+        val claudeBin = ClaudeRuntime.ensure(context)
         val home = File(context.filesDir, "home").apply { mkdirs() }
         val projects = File(home, "projects").apply { mkdirs() }
         val tmp = File(context.filesDir, "tmp").apply { mkdirs() }
@@ -61,7 +65,8 @@ object BridgeLauncher {
             binary.absolutePath,
             "-f",
             "--no-hub",
-            "--no-claude",
+            "--claude-bin",
+            claudeBin,
             "--token",
             bridgeToken,
             "-p",
@@ -84,8 +89,9 @@ object BridgeLauncher {
         val started = builder.start()
         process = started
         this.port = port
+        processPid = started.safePid().takeIf { it > 0 } ?: findBridgePid(binary)
         lastError = null
-        appendLog("Bridge started (pid ${started.safePid()}) on 127.0.0.1:$port")
+        appendLog("Bridge started (pid $processPid) on 127.0.0.1:$port")
 
         Thread {
             try {
@@ -133,7 +139,8 @@ object BridgeLauncher {
     private fun stopLocked() {
         val running = process ?: return
         process = null
-        appendLog("Stopping bridge (pid ${running.safePid()})")
+        appendLog("Stopping bridge (pid $processPid)")
+        processPid = 0L
         try {
             running.destroy()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -152,11 +159,29 @@ object BridgeLauncher {
         val alive = running != null
         return mapOf(
             "running" to alive,
-            "pid" to if (alive) running?.safePid() ?: 0L else 0L,
+            "pid" to if (alive) processPid else 0L,
             "port" to port,
             "log" to logs.joinToString("\n"),
             "error" to lastError,
         )
+    }
+
+    private fun findBridgePid(binary: File): Long {
+        val proc = File("/proc")
+        val entries = proc.listFiles() ?: return 0L
+        for (entry in entries) {
+            if (!entry.isDirectory || entry.name.toLongOrNull() == null) {
+                continue
+            }
+            try {
+                val cmdline = File(entry, "cmdline").readText()
+                if (cmdline.contains(binary.absolutePath)) {
+                    return entry.name.toLong()
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return 0L
     }
 
     private fun Process.safePid(): Long = try {

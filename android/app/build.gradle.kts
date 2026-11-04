@@ -44,3 +44,7 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    implementation("org.apache.commons:commons-compress:1.26.1")
+}
