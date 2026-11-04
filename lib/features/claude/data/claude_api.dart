@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../../core/constants/app_info.dart';
 import '../../bridge/data/bridge_service.dart';
 import '../domain/claude_models.dart';
 
@@ -20,9 +19,7 @@ class ClaudeApi {
 
   final BridgeService _bridge;
 
-  Uri _uri(String path) => Uri.parse(
-    'http://${AppInfo.bridgeHost}:${AppInfo.bridgePort}/api/claude$path',
-  );
+  Future<Uri> _uri(String path) => _bridge.resolve('/api/claude$path');
 
   Future<ClaudeCliStatus> status() async {
     final json = await _request(
@@ -112,7 +109,7 @@ class ClaudeApi {
   }) async {
     final headers = await _bridge.authHeaders();
     headers['Content-Type'] = 'application/json';
-    final uri = _uri(path);
+    final uri = await _uri(path);
     final request = http.Request(method, uri)..headers.addAll(headers);
     if (body != null) {
       request.body = jsonEncode(body);

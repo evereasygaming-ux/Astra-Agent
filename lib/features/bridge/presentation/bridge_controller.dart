@@ -1,9 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/bridge_config_store.dart';
 import '../data/bridge_service.dart';
+import '../domain/bridge_config.dart';
 import '../domain/bridge_status.dart';
 
-final bridgeServiceProvider = Provider<BridgeService>((ref) => BridgeService());
+final bridgeConfigStoreProvider = Provider<BridgeConfigStore>(
+  (ref) => BridgeConfigStore(),
+);
+
+final bridgeConfigProvider = FutureProvider<BridgeConfig>(
+  (ref) => ref.watch(bridgeConfigStoreProvider).load(refresh: true),
+);
+
+final bridgeServiceProvider = Provider<BridgeService>(
+  (ref) => BridgeService(configStore: ref.watch(bridgeConfigStoreProvider)),
+);
 
 class BridgeController extends Notifier<BridgeStatus> {
   late final BridgeService _service = ref.read(bridgeServiceProvider);

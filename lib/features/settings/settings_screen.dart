@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/app_info.dart';
+import '../bridge/data/bridge_channel.dart';
+import '../bridge/domain/bridge_config.dart';
 import '../bridge/presentation/bridge_controller.dart';
+import '../termux/termux_controller.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -38,9 +41,205 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _saveConfig(
+    BuildContext context,
+    WidgetRef ref,
+    BridgeConfig previous,
+    BridgeConfig config,
+  ) async {
+    final service = ref.read(bridgeServiceProvider);
+    await service.stop();
+    final saved = await ref.read(bridgeConfigStoreProvider).save(config);
+    ref.invalidate(bridgeConfigProvider);
+    await ref.read(bridgeControllerProvider.notifier).refresh();
+    var message = 'Bridge settings saved';
+    final shouldRestartTermux =
+        previous.isExternal &&
+        saved.isExternal &&
+        saved.isLoopback &&
+        (previous.token != saved.token || previous.port != saved.port);
+    if (shouldRestartTermux) {
+      final restarted = await ref
+          .read(termuxControllerProvider.notifier)
+          .applyBridgeConfig(saved);
+      if (!restarted) {
+        final error = ref.read(termuxControllerProvider).error;
+        message =
+            'Settings saved, but Debian bridge was not restarted. '
+            '${error ?? 'Run Set up & launch in Debian proot automation.'}';
+      }
+    }
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _editMode(
+    BuildContext context,
+    WidgetRef ref,
+    BridgeConfig config,
+  ) async {
+    final mode = await showDialog<BridgeMode>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Bridge mode'),
+        children: [
+          RadioGroup<BridgeMode>(
+            groupValue: config.mode,
+            onChanged: (value) => Navigator.of(context).pop(value),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                RadioListTile<BridgeMode>(
+                  value: BridgeMode.embedded,
+                  title: Text('Embedded'),
+                  subtitle: Text('Bridge bundled inside AstraAgent'),
+                ),
+                RadioListTile<BridgeMode>(
+                  value: BridgeMode.external,
+                  title: Text('Debian proot (Termux)'),
+                  subtitle: Text('Connect to the Debian bridge on localhost'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (mode == null || mode == config.mode || !context.mounted) {
+      return;
+    }
+    await _saveConfig(context, ref, config, config.copyWith(mode: mode));
+  }
+
+  Future<void> _editUrl(
+    BuildContext context,
+    WidgetRef ref,
+    BridgeConfig config,
+  ) async {
+    final controller = TextEditingController(text: config.trimmedUrl);
+    final url = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Bridge URL'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(hintText: 'http://127.0.0.1:1234'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (url == null || url.isEmpty) {
+      return;
+    }
+    final parsed = Uri.tryParse(url);
+    if (parsed == null || !parsed.hasScheme) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter a full URL, e.g. http://127.0.0.1:1234'),
+          ),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
+    await _saveConfig(context, ref, config, config.copyWith(url: url));
+  }
+
+  Future<void> _editToken(
+    BuildContext context,
+    WidgetRef ref,
+    BridgeConfig config,
+  ) async {
+    final controller = TextEditingController(text: config.token);
+    final token = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Bridge token'),
+        content: TextField(
+          controller: controller,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            hintText: '12 lowercase letters or digits',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (token == null) {
+      return;
+    }
+    if (token.isNotEmpty && !BridgeConfig.isValidToken(token)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Token must be 12 lowercase letters or digits'),
+          ),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
+    await _saveConfig(context, ref, config, config.copyWith(token: token));
+  }
+
+  Future<void> _testExternal(
+    BuildContext context,
+    WidgetRef ref,
+    BridgeConfig config,
+  ) async {
+    try {
+      final version = await ref.read(bridgeServiceProvider).testExternal();
+      await ref.read(bridgeControllerProvider.notifier).refresh();
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connected to ${config.trimmedUrl} ($version)')),
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bridge = ref.watch(bridgeControllerProvider);
+    final config =
+        ref.watch(bridgeConfigProvider).value ?? const BridgeConfig();
+    final termux = ref.watch(termuxControllerProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -70,31 +269,67 @@ class SettingsScreen extends ConsumerWidget {
             title: 'Bridge',
             children: [
               _Tile(
+                icon: Icons.device_hub_outlined,
+                title: 'Mode',
+                subtitle: config.isExternal
+                    ? 'Bridge running in Debian proot'
+                    : 'Bridge bundled inside AstraAgent',
+                trailing: config.isExternal ? 'Debian proot' : 'Embedded',
+                onTap: () => _editMode(context, ref, config),
+              ),
+              if (config.isExternal) ...[
+                _Tile(
+                  icon: Icons.lan_outlined,
+                  title: 'Bridge URL',
+                  subtitle: config.trimmedUrl,
+                  trailing: 'Edit',
+                  onTap: () => _editUrl(context, ref, config),
+                ),
+                _Tile(
+                  icon: Icons.key_outlined,
+                  title: 'Access token',
+                  subtitle: config.token.isEmpty
+                      ? 'Required: same --token as Termux'
+                      : '${config.token.substring(0, 3)}•••••••••',
+                  trailing: 'Edit',
+                  onTap: () => _editToken(context, ref, config),
+                ),
+                _Tile(
+                  icon: Icons.wifi_tethering,
+                  title: 'Test connection',
+                  subtitle: 'Probe the bridge running in Debian proot',
+                  onTap: () => _testExternal(context, ref, config),
+                ),
+              ],
+              _Tile(
                 icon: Icons.power_settings_new,
-                title: 'Local bridge',
+                title: config.isExternal ? 'External bridge' : 'Local bridge',
                 subtitle: bridge.isRunning
-                    ? 'PID ${bridge.pid} • ${bridge.healthVersion ?? 'healthy'}'
-                    : bridge.error ?? 'Tap to start',
+                    ? '${config.isExternal ? config.trimmedUrl : 'PID ${bridge.pid}'} '
+                          '• ${bridge.healthVersion ?? 'healthy'}'
+                    : bridge.error ?? 'Tap to connect',
                 trailing: bridge.label,
                 onTap: () =>
                     ref.read(bridgeControllerProvider.notifier).toggle(),
               ),
-              const _Tile(
-                icon: Icons.lan_outlined,
-                title: 'Host',
-                subtitle: AppInfo.bridgeHost,
-              ),
-              const _Tile(
-                icon: Icons.settings_ethernet,
-                title: 'Ports',
-                subtitle:
-                    'Bridge ${AppInfo.bridgePort}  •  Hub ${AppInfo.hubPort}',
-              ),
-              const _Tile(
-                icon: Icons.key_outlined,
-                title: 'Access token',
-                subtitle: 'Generated on first launch',
-              ),
+              if (!config.isExternal) ...[
+                const _Tile(
+                  icon: Icons.lan_outlined,
+                  title: 'Host',
+                  subtitle: AppInfo.bridgeHost,
+                ),
+                const _Tile(
+                  icon: Icons.settings_ethernet,
+                  title: 'Ports',
+                  subtitle:
+                      'Bridge ${AppInfo.bridgePort}  •  Hub ${AppInfo.hubPort}',
+                ),
+                const _Tile(
+                  icon: Icons.key_outlined,
+                  title: 'Access token',
+                  subtitle: 'Generated on first launch',
+                ),
+              ],
               _Tile(
                 icon: Icons.receipt_long_outlined,
                 title: 'View logs',
@@ -108,6 +343,75 @@ class SettingsScreen extends ConsumerWidget {
                 onTap: () =>
                     ref.read(bridgeControllerProvider.notifier).clearLogs(),
               ),
+            ],
+          ),
+          _Section(
+            title: 'Debian proot automation',
+            children: [
+              _Tile(
+                icon: Icons.terminal,
+                title: 'Termux',
+                subtitle: termux.installed
+                    ? termux.permission
+                          ? 'Installed • run-command permission granted'
+                          : 'Installed • permission not granted'
+                    : 'Not installed',
+                trailing: termux.installed ? 'Ready' : 'Install',
+                onTap: termux.installed
+                    ? null
+                    : () => BridgeChannel().openUrl(
+                        'https://f-droid.org/packages/com.termux/',
+                      ),
+              ),
+              _Tile(
+                icon: termux.busy
+                    ? Icons.hourglass_top
+                    : Icons.rocket_launch_outlined,
+                title: 'Set up & launch',
+                subtitle: termux.busy ? termux.message ?? 'Working...' : 'Install bridge in Debian; reuse the existing AGY runtime',
+                trailing: termux.busy ? 'Busy' : 'Run',
+                onTap: termux.busy
+                    ? null
+                    : () => ref
+                          .read(termuxControllerProvider.notifier)
+                          .setupAndLaunch(),
+              ),
+              _Tile(
+                icon: Icons.play_circle_outline,
+                title: 'Launch bridge',
+                subtitle: 'Start an existing Debian bridge setup',
+                trailing: 'Start',
+                onTap: termux.busy
+                    ? null
+                    : () =>
+                          ref.read(termuxControllerProvider.notifier).launch(),
+              ),
+              _Tile(
+                icon: Icons.settings_suggest_outlined,
+                title: 'Termux settings',
+                subtitle: 'Enable "Allow external apps" once',
+                trailing: 'Open',
+                onTap: () => ref
+                    .read(termuxControllerProvider.notifier)
+                    .openTermuxSettings(),
+              ),
+              _Tile(
+                icon: Icons.open_in_new,
+                title: 'Open Termux',
+                subtitle: 'View setup and bridge logs',
+                trailing: 'Open',
+                onTap: () =>
+                    ref.read(termuxControllerProvider.notifier).openTermux(),
+              ),
+              if (termux.error != null)
+                _Tile(
+                  icon: Icons.error_outline,
+                  title: 'Last error',
+                  subtitle: termux.error!,
+                  trailing: 'Clear',
+                  onTap: () =>
+                      ref.read(termuxControllerProvider.notifier).refresh(),
+                ),
             ],
           ),
           _Section(

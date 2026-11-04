@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../bridge/data/bridge_channel.dart';
+import '../../bridge/presentation/bridge_controller.dart';
 import '../data/agy_api.dart';
 import '../domain/agy_models.dart';
 
@@ -45,7 +46,9 @@ class AgyState {
   }
 }
 
-final agyApiProvider = Provider<AgyApi>((ref) => AgyApi());
+final agyApiProvider = Provider<AgyApi>(
+  (ref) => AgyApi(bridge: ref.watch(bridgeServiceProvider)),
+);
 
 class AgyController extends Notifier<AgyState> {
   late final AgyApi _api = ref.read(agyApiProvider);

@@ -68,6 +68,92 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
+                    "getBridgeConfig" -> {
+                        result.success(readBridgeConfig())
+                    }
+
+                    "setBridgeConfig" -> {
+                        val mode = call.argument<String>("mode") ?: "external"
+                        val url = call.argument<String>("url") ?: ""
+                        val token = call.argument<String>("token") ?: ""
+                        getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .edit()
+                            .putString("mode", mode)
+                            .putString("url", url)
+                            .putString("token", token)
+                            .apply()
+                        result.success(readBridgeConfig())
+                    }
+
+                    "termuxStatus" -> {
+                        result.success(TermuxRunner.status(applicationContext))
+                    }
+
+                    "termuxRequestPermission" -> {
+                        TermuxRunner.requestPermission(this)
+                        result.success(true)
+                    }
+
+                    "termuxRun" -> {
+                        val script = call.argument<String>("script")
+                        val background =
+                            call.argument<Boolean>("background") ?: false
+                        if (script.isNullOrBlank()) {
+                            result.error("bad_script", "script is required", null)
+                        } else {
+                            try {
+                                TermuxRunner.run(
+                                    applicationContext,
+                                    script,
+                                    background,
+                                )
+                                result.success(true)
+                            } catch (error: Exception) {
+                                result.error(
+                                    "termux_run_failed",
+                                    error.message,
+                                    null,
+                                )
+                            }
+                        }
+                    }
+
+                    "termuxOpen" -> {
+                        try {
+                            TermuxRunner.open(applicationContext)
+                            result.success(true)
+                        } catch (error: Exception) {
+                            result.error("termux_open_failed", error.message, null)
+                        }
+                    }
+
+                    "termuxOpenSettings" -> {
+                        try {
+                            TermuxRunner.openSettings(applicationContext)
+                            result.success(true)
+                        } catch (error: Exception) {
+                            result.error(
+                                "termux_settings_failed",
+                                error.message,
+                                null,
+                            )
+                        }
+                    }
+
+                    "termuxAssetPort" -> {
+                        try {
+                            result.success(
+                                TermuxRunner.assetServerPort(applicationContext),
+                            )
+                        } catch (error: Exception) {
+                            result.error(
+                                "termux_asset_failed",
+                                error.message,
+                                null,
+                            )
+                        }
+                    }
+
                     "agyStatus" -> {
                         try {
                             result.success(AgyRuntime.status(applicationContext))
@@ -95,12 +181,23 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         if (isFinishing) {
             BridgeLauncher.stop()
+            TermuxRunner.stopServer()
             bridgeExecutor.shutdown()
         }
         super.onDestroy()
     }
 
+    private fun readBridgeConfig(): Map<String, Any?> {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        return mapOf(
+            "mode" to prefs.getString("mode", "external"),
+            "url" to prefs.getString("url", "http://127.0.0.1:1234"),
+            "token" to prefs.getString("token", ""),
+        )
+    }
+
     companion object {
         private const val CHANNEL = "com.astra.agent/bridge"
+        private const val PREFS = "astra_bridge"
     }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../bridge/domain/bridge_config.dart';
 import '../../bridge/presentation/bridge_controller.dart';
 import 'agy_controller.dart';
 
@@ -27,6 +28,8 @@ class _AgyScreenState extends ConsumerState<AgyScreen> {
   Widget build(BuildContext context) {
     final agy = ref.watch(agyControllerProvider);
     final bridge = ref.watch(bridgeControllerProvider);
+    final config =
+        ref.watch(bridgeConfigProvider).value ?? const BridgeConfig();
     final busy = agy.loading || agy.installing;
 
     return Scaffold(
@@ -68,14 +71,19 @@ class _AgyScreenState extends ConsumerState<AgyScreen> {
               ),
             ),
           if (!bridge.isRunning) const SizedBox(height: 16),
-          _RuntimePanel(agy: agy, enabled: !busy),
+          if (config.isExternal)
+            _TermuxPanel(config: config)
+          else
+            const _TermuxRequiredPanel(),
           const SizedBox(height: 16),
           _HubPanel(agy: agy, enabled: bridge.isRunning && !busy),
           if (agy.error != null) ...[
             const SizedBox(height: 16),
             _Panel(
-              color: Theme.of(context).colorScheme.error.withValues(alpha: 0.10),
-              borderColor: Theme.of(context).colorScheme.error.withValues(alpha: 0.25),
+              color: Theme.of(context).colorScheme.error
+                  .withValues(alpha: 0.10),
+              borderColor: Theme.of(context).colorScheme.error
+                  .withValues(alpha: 0.25),
               child: Text(
                 agy.error!,
                 style: TextStyle(
@@ -88,8 +96,9 @@ class _AgyScreenState extends ConsumerState<AgyScreen> {
           ],
           const SizedBox(height: 20),
           const Text(
-            'AGY is the Antigravity (Gemini) agent. It runs locally through the '
-            'embedded Go bridge and the bundled glibc runtime.',
+            'AGY is the Antigravity (Gemini) agent. In Termux mode it runs '
+            'inside your Termux environment and AstraAgent talks to the '
+            'bridge over localhost.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.5),
           ),
         ],
@@ -98,95 +107,117 @@ class _AgyScreenState extends ConsumerState<AgyScreen> {
   }
 }
 
-class _RuntimePanel extends ConsumerWidget {
-  const _RuntimePanel({required this.agy, required this.enabled});
+class _TermuxPanel extends StatelessWidget {
+  const _TermuxPanel({required this.config});
 
-  final AgyState agy;
-  final bool enabled;
+  final BridgeConfig config;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final runtime = agy.runtime;
-    final installed = runtime?.installed == true;
-    final sizeMb = ((runtime?.size ?? 0) / (1024 * 1024)).toStringAsFixed(0);
-
+  Widget build(BuildContext context) {
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.bolt, color: AppTheme.accent),
-              const SizedBox(width: 10),
-              const Expanded(
+              Icon(Icons.terminal, color: AppTheme.accent),
+              SizedBox(width: 10),
+              Expanded(
                 child: Text(
-                  'Runtime',
+                  'Termux runtime',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
               ),
-              if (agy.loading)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                _Pill(
-                  text: installed ? 'Installed' : 'Not installed',
-                  color: installed ? AppTheme.accent : AppTheme.muted,
-                ),
+              _Pill(text: 'Linked', color: AppTheme.accent),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            installed
-                ? 'Daemon • $sizeMb MB\n${runtime?.path ?? ''}'
-                : 'Install the AGY daemon to start using Gemini models.',
+            'AGY is managed by Termux. AstraAgent only connects to the bridge '
+            'at ${config.trimmedUrl}; sign-in and updates happen inside Debian proot.',
             style: const TextStyle(
               color: AppTheme.muted,
               fontSize: 12,
               height: 1.45,
             ),
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: enabled
-                  ? () => ref.read(agyControllerProvider.notifier).install()
-                  : null,
-              icon: agy.installing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Icon(
-                      installed ? Icons.system_update_alt : Icons.download,
-                      size: 18,
-                    ),
-              label: Text(
-                agy.installing
-                    ? 'Downloading…'
-                    : installed
-                        ? 'Reinstall runtime'
-                        : 'Install runtime',
+          const SizedBox(height: 12),
+          const _SetupSteps(),
+        ],
+      ),
+    );
+  }
+}
+
+class _TermuxRequiredPanel extends StatelessWidget {
+  const _TermuxRequiredPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      color: AppTheme.accentAlt.withValues(alpha: 0.10),
+      borderColor: AppTheme.accentAlt.withValues(alpha: 0.25),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.link_off, color: AppTheme.accentAlt),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Termux mode required',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'AGY cannot run inside the AstraAgent sandbox without a Linux '
+            'environment. Switch Settings -> Bridge -> Mode to Termux and run '
+            'the bridge from Termux.',
+            style: TextStyle(fontSize: 12, height: 1.45),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SetupSteps extends StatelessWidget {
+  const _SetupSteps();
+
+  @override
+  Widget build(BuildContext context) {
+    const steps = [
+      'Install Termux from F-Droid (not the Play Store build).',
+      'AstraAgent -> Home -> Set up & launch.',
+      'Allow the Termux run-command permission and "Allow external apps".',
+      'Wait until the bridge shows Online, then sign in with Google.',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Termux quick start',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        for (final step in steps)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: SelectableText(
+              '• $step',
+              style: const TextStyle(
+                color: AppTheme.muted,
+                fontFamily: 'monospace',
+                fontSize: 11,
+                height: 1.45,
               ),
             ),
           ),
-          if (agy.installing)
-            const Padding(
-              padding: EdgeInsets.only(top: 10),
-              child: Text(
-                'This downloads ~180 MB. Keep the app open until it finishes.',
-                style: TextStyle(color: AppTheme.muted, fontSize: 11),
-              ),
-            ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -234,7 +265,7 @@ class _HubPanel extends ConsumerWidget {
           Text(
             online
                 ? 'Hub is online. Sign-in is managed by Google.'
-                : 'The hub is $status. Restart the bridge after installing the runtime, then sign in.',
+                : 'The hub is $status. Start the bridge in Termux, then sign in.',
             style: const TextStyle(
               color: AppTheme.muted,
               fontSize: 12,
@@ -254,7 +285,9 @@ class _HubPanel extends ConsumerWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: enabled
-                    ? () => ref.read(agyControllerProvider.notifier).openLoginUrl()
+                    ? () => ref
+                          .read(agyControllerProvider.notifier)
+                          .openLoginUrl()
                     : null,
                 icon: const Icon(Icons.open_in_browser, size: 18),
                 label: const Text('Open sign-in page'),

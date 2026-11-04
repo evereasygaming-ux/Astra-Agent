@@ -44,6 +44,59 @@ class BridgeChannel {
     await _channel.invokeMethod<void>('openUrl', {'url': url});
   }
 
+  Future<Map<String, Object?>> config() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'getBridgeConfig',
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<Map<String, Object?>> saveConfig({
+    required String mode,
+    required String url,
+    required String token,
+  }) async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'setBridgeConfig',
+      {'mode': mode, 'url': url, 'token': token},
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<Map<String, Object?>> termuxStatus() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'termuxStatus',
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<void> termuxRequestPermission() async {
+    await _channel.invokeMethod<void>('termuxRequestPermission');
+  }
+
+  Future<void> termuxRun({
+    required String script,
+    bool background = false,
+  }) async {
+    await _channel.invokeMethod<void>('termuxRun', {
+      'script': script,
+      'background': background,
+    });
+  }
+
+  Future<void> termuxOpen() async {
+    await _channel.invokeMethod<void>('termuxOpen');
+  }
+
+  Future<void> termuxOpenSettings() async {
+    await _channel.invokeMethod<void>('termuxOpenSettings');
+  }
+
+  Future<int> termuxAssetPort() async {
+    final result = await _channel.invokeMethod<int>('termuxAssetPort');
+    return result ?? 0;
+  }
+
   Future<Map<String, Object?>> agyStatus() async {
     final result = await _channel.invokeMethod<Map<Object?, Object?>>('agyStatus');
     return result?.cast<String, Object?>() ?? const {};

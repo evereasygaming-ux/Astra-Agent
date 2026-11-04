@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/app_info.dart';
+import '../bridge/domain/bridge_config.dart';
 import '../bridge/domain/bridge_status.dart';
 import '../bridge/presentation/bridge_controller.dart';
+import '../termux/termux_controller.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -18,8 +20,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) {
+        return;
+      }
+      final config = await ref.read(bridgeConfigProvider.future);
+      if (!mounted) {
+        return;
+      }
+      if (config.isExternal) {
+        await ref.read(bridgeControllerProvider.notifier).refresh();
         return;
       }
       final status = ref.read(bridgeControllerProvider);
@@ -38,6 +48,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final bridge = ref.watch(bridgeControllerProvider);
+    final config =
+        ref.watch(bridgeConfigProvider).value ?? const BridgeConfig();
+    final termux = ref.watch(termuxControllerProvider);
     final bridgeColor = switch (bridge.phase) {
       BridgePhase.running => AppTheme.accent,
       BridgePhase.error => Theme.of(context).colorScheme.error,
@@ -52,6 +65,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _Header(onSettings: () => context.push('/settings')),
             const SizedBox(height: 24),
             const _HeroCard(),
+            if (config.isExternal && !bridge.isRunning) ...[
+              const SizedBox(height: 16),
+              _TermuxCard(
+                termux: termux,
+                onSetup: () => ref
+                    .read(termuxControllerProvider.notifier)
+                    .setupAndLaunch(),
+                onLaunch: () =>
+                    ref.read(termuxControllerProvider.notifier).launch(),
+              ),
+            ],
             const SizedBox(height: 24),
             _SectionTitle(title: 'Status'),
             const SizedBox(height: 12),
@@ -69,11 +93,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Expanded(
                   child: _StatusTile(
                     icon: Icons.hub_outlined,
-                    label: 'Bridge',
+                    label: config.isExternal ? 'Debian bridge' : 'Bridge',
                     value: bridge.label,
                     color: bridgeColor,
-                    onTap: () =>
-                        ref.read(bridgeControllerProvider.notifier).toggle(),
+                    onTap: () => config.isExternal
+                        ? ref.read(termuxControllerProvider.notifier).launch()
+                        : ref.read(bridgeControllerProvider.notifier).toggle(),
                   ),
                 ),
               ],
@@ -206,6 +231,99 @@ class _Header extends StatelessWidget {
           icon: const Icon(Icons.settings_outlined),
         ),
       ],
+    );
+  }
+}
+
+class _TermuxCard extends StatelessWidget {
+  const _TermuxCard({
+    required this.termux,
+    required this.onSetup,
+    required this.onLaunch,
+  });
+
+  final TermuxState termux;
+  final VoidCallback onSetup;
+  final VoidCallback onLaunch;
+
+  @override
+  Widget build(BuildContext context) {
+    final message =
+        termux.error ??
+        termux.message ??
+        (termux.installed
+            ? 'Debian is ready. Set up the bridge once, then launch it from here.'
+            : 'Install Termux and Debian proot first.');
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.terminal, color: AppTheme.accent),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Debian proot',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (termux.busy)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Text(
+                  termux.ready ? 'Online' : 'Offline',
+                  style: TextStyle(
+                    color: termux.ready ? AppTheme.accent : AppTheme.muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppTheme.muted,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: termux.busy ? null : onSetup,
+                  icon: const Icon(Icons.download, size: 18),
+                  label: const Text('Set up & launch'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: termux.busy ? null : onLaunch,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: const Text('Launch'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

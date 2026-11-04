@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../bridge/data/bridge_channel.dart';
+import '../../bridge/presentation/bridge_controller.dart';
 import '../data/claude_api.dart';
 import '../domain/claude_models.dart';
 
@@ -51,7 +52,9 @@ class ClaudeState {
   }
 }
 
-final claudeApiProvider = Provider<ClaudeApi>((ref) => ClaudeApi());
+final claudeApiProvider = Provider<ClaudeApi>(
+  (ref) => ClaudeApi(bridge: ref.watch(bridgeServiceProvider)),
+);
 
 class ClaudeController extends Notifier<ClaudeState> {
   late final ClaudeApi _api = ref.read(claudeApiProvider);

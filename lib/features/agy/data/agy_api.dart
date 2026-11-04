@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../../core/constants/app_info.dart';
 import '../../bridge/data/bridge_channel.dart';
 import '../../bridge/data/bridge_service.dart';
 import '../domain/agy_models.dart';
@@ -22,9 +21,7 @@ class AgyApi {
   final BridgeService _bridge;
   final BridgeChannel _channel = BridgeChannel();
 
-  Uri _uri(String path) => Uri.parse(
-    'http://${AppInfo.bridgeHost}:${AppInfo.bridgePort}$path',
-  );
+  Future<Uri> _uri(String path) => _bridge.resolve(path);
 
   Future<AgyRuntimeStatus> runtime() async {
     final raw = await _channel.agyStatus();
@@ -69,7 +66,7 @@ class AgyApi {
   }) async {
     final headers = await _bridge.authHeaders();
     headers['Content-Type'] = 'application/json';
-    final uri = _uri(path);
+    final uri = await _uri(path);
     final request = http.Request(method, uri)..headers.addAll(headers);
     if (body != null) {
       request.body = jsonEncode(body);
