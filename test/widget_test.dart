@@ -8,6 +8,9 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: AstraAgentApp()));
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(find.text('Chat'), 300);
+    await tester.scrollUntilVisible(find.text('Terminal'), 300);
+
     expect(find.text('AstraAgent'), findsWidgets);
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Terminal'), findsOneWidget);
