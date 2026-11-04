@@ -144,11 +144,11 @@ class _Section extends StatelessWidget {
               ),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
+          Material(
+            color: AppTheme.surface,
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(
