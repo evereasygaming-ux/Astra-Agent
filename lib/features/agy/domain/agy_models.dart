@@ -22,7 +22,9 @@ class AgyHubStatus {
       status: json['status'] as String? ?? 'stopped',
       port: _parseInt(json['port']),
       error: json['error'] as String?,
-      logs: logsRaw is List ? logsRaw.map((e) => e.toString()).toList() : const [],
+      logs: logsRaw is List
+          ? logsRaw.map((e) => e.toString()).toList()
+          : const [],
     );
   }
 }
@@ -66,6 +68,119 @@ class AgyLoginUrl {
     return AgyLoginUrl(
       url: json['loginUrl'] as String?,
       active: json['active'] == true,
+    );
+  }
+}
+
+class AgyQuotaSummary {
+  const AgyQuotaSummary({this.description = '', this.groups = const []});
+
+  final String description;
+  final List<AgyQuotaGroup> groups;
+
+  factory AgyQuotaSummary.fromJson(Map<String, dynamic> json) {
+    final rawGroups = json['groups'];
+    final rawBuckets = json['buckets'];
+    final groups = rawGroups is List
+        ? rawGroups
+              .whereType<Map>()
+              .map(
+                (item) => AgyQuotaGroup.fromJson(item.cast<String, dynamic>()),
+              )
+              .where((group) => group.buckets.isNotEmpty)
+              .toList()
+        : <AgyQuotaGroup>[];
+    if (groups.isEmpty && rawBuckets is List) {
+      final buckets = rawBuckets
+          .whereType<Map>()
+          .map((item) => AgyQuotaBucket.fromJson(item.cast<String, dynamic>()))
+          .toList();
+      if (buckets.isNotEmpty) {
+        groups.add(AgyQuotaGroup(name: 'Antigravity usage', buckets: buckets));
+      }
+    }
+    return AgyQuotaSummary(
+      description: json['description']?.toString() ?? '',
+      groups: groups,
+    );
+  }
+}
+
+class AgyQuotaGroup {
+  const AgyQuotaGroup({
+    required this.name,
+    this.description = '',
+    this.buckets = const [],
+  });
+
+  final String name;
+  final String description;
+  final List<AgyQuotaBucket> buckets;
+
+  factory AgyQuotaGroup.fromJson(Map<String, dynamic> json) {
+    final rawBuckets = json['buckets'];
+    return AgyQuotaGroup(
+      name: json['displayName']?.toString() ?? 'Usage',
+      description: json['description']?.toString() ?? '',
+      buckets: rawBuckets is List
+          ? rawBuckets
+                .whereType<Map>()
+                .map(
+                  (item) =>
+                      AgyQuotaBucket.fromJson(item.cast<String, dynamic>()),
+                )
+                .where((bucket) => !bucket.disabled)
+                .toList()
+          : const [],
+    );
+  }
+}
+
+class AgyQuotaBucket {
+  const AgyQuotaBucket({
+    required this.name,
+    required this.remainingFraction,
+    this.window = '',
+    this.remainingAmount,
+    this.resetAt,
+    this.description = '',
+    this.disabled = false,
+  });
+
+  final String name;
+  final String window;
+  final double remainingFraction;
+  final int? remainingAmount;
+  final DateTime? resetAt;
+  final String description;
+  final bool disabled;
+
+  factory AgyQuotaBucket.fromJson(Map<String, dynamic> json) {
+    final rawFraction = json['remainingFraction'];
+    final fraction = rawFraction is num
+        ? rawFraction.toDouble()
+        : double.tryParse(rawFraction?.toString() ?? '') ?? 0;
+    final rawReset = json['resetTime'];
+    DateTime? resetAt;
+    if (rawReset is Map) {
+      final seconds = _parseInt(rawReset['seconds']);
+      if (seconds != null && seconds > 0) {
+        resetAt = DateTime.fromMillisecondsSinceEpoch(seconds * 1000).toLocal();
+      }
+    } else if (rawReset is String) {
+      resetAt = DateTime.tryParse(rawReset)?.toLocal();
+    }
+    return AgyQuotaBucket(
+      name:
+          json['displayName']?.toString() ??
+          json['window']?.toString() ??
+          'Usage',
+      window: json['window']?.toString() ?? '',
+      remainingFraction: fraction.clamp(0, 1).toDouble(),
+      remainingAmount: _parseInt(json['remainingAmount']),
+      resetAt: resetAt,
+      description: json['description']?.toString() ?? '',
+      disabled: json['disabled'] == true,
     );
   }
 }

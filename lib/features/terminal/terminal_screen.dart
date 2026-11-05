@@ -11,7 +11,34 @@ import 'package:http/http.dart' as http;
 import 'package:xterm/xterm.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../app/theme/app_panel.dart';
 import '../bridge/presentation/bridge_controller.dart';
+
+const _astraTerminalTheme = TerminalTheme(
+  cursor: AppTheme.cyan,
+  selection: Color(0x88586BFF),
+  foreground: Color(0xFFE2E4F0),
+  background: Color(0xFF090A12),
+  black: Color(0xFF090A12),
+  red: Color(0xFFFF657A),
+  green: Color(0xFF47D7A1),
+  yellow: Color(0xFFFFD166),
+  blue: Color(0xFF6D8BFF),
+  magenta: Color(0xFFF12DFF),
+  cyan: Color(0xFF20DFFF),
+  white: Color(0xFFE2E4F0),
+  brightBlack: Color(0xFF77788D),
+  brightRed: Color(0xFFFF8292),
+  brightGreen: Color(0xFF74E7B8),
+  brightYellow: Color(0xFFFFDE91),
+  brightBlue: Color(0xFF8BA2FF),
+  brightMagenta: Color(0xFFF66BFF),
+  brightCyan: Color(0xFF62E8FF),
+  brightWhite: Colors.white,
+  searchHitBackground: Color(0xFFFFFF2B),
+  searchHitBackgroundCurrent: Color(0xFF31FF26),
+  searchHitForeground: Colors.black,
+);
 
 class TerminalScreen extends ConsumerStatefulWidget {
   const TerminalScreen({super.key, this.initialWorkspace, this.initialCommand});
@@ -268,42 +295,72 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: _workspace,
-                decoration: const InputDecoration(labelText: 'Workspace'),
-                items: _workspaces
-                    .map(
-                      (item) => DropdownMenuItem(
-                        value: item.path,
-                        child: Text(item.name, overflow: TextOverflow.ellipsis),
+              AppPanel(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: _workspace,
+                      decoration: const InputDecoration(
+                        labelText: 'Workspace',
+                        prefixIcon: Icon(Icons.folder_open_outlined),
                       ),
-                    )
-                    .toList(),
-                onChanged: _loading || _connecting
-                    ? null
-                    : (value) {
-                        if (value == null) return;
-                        setState(() => _workspace = value);
-                        unawaited(_connect());
-                      },
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    _connected ? Icons.circle : Icons.circle_outlined,
-                    size: 12,
-                    color: _connected ? AppTheme.accent : Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _loading ? 'Loading workspaces…' : _status,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      items: _workspaces
+                          .map(
+                            (item) => DropdownMenuItem(
+                              value: item.path,
+                              child: Text(
+                                item.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _loading || _connecting
+                          ? null
+                          : (value) {
+                              if (value == null) return;
+                              setState(() => _workspace = value);
+                              unawaited(_connect());
+                            },
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(
+                          _connected
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          size: 16,
+                          color: _connected ? AppTheme.cyan : AppTheme.muted,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _loading ? 'Loading workspaces…' : _status,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppTheme.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _connected ? 'LIVE' : 'PTY',
+                          style: TextStyle(
+                            color: _connected
+                                ? AppTheme.cyan
+                                : AppTheme.accentAlt,
+                            fontSize: 10,
+                            letterSpacing: 1,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
@@ -358,33 +415,81 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                 child: Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: const Color(0xff101318),
-                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFF090A12),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppTheme.outline),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: TerminalView(
-                    _terminal,
-                    controller: _terminalController,
-                    autofocus: true,
-                    theme: TerminalThemes.defaultTheme,
-                    textStyle: const TerminalStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                    ),
-                    padding: const EdgeInsets.all(10),
-                    keyboardAppearance: Brightness.dark,
-                    onSecondaryTapDown: (details, offset) async {
-                      final selection = _terminalController.selection;
-                      if (selection != null) {
-                        final text = _terminal.buffer.getText(selection);
-                        _terminalController.clearSelection();
-                        await Clipboard.setData(ClipboardData(text: text));
-                      } else {
-                        final data = await Clipboard.getData('text/plain');
-                        final text = data?.text;
-                        if (text != null) _terminal.paste(text);
-                      }
-                    },
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 38,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: const BoxDecoration(
+                          color: AppTheme.surface,
+                          border: Border(
+                            bottom: BorderSide(color: AppTheme.outline),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.terminal,
+                              size: 17,
+                              color: AppTheme.cyan,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'TERMINAL',
+                              style: TextStyle(
+                                fontSize: 10,
+                                letterSpacing: 1.2,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '$_terminalColumns×$_terminalRows',
+                              style: const TextStyle(
+                                color: AppTheme.muted,
+                                fontFamily: 'monospace',
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: TerminalView(
+                          _terminal,
+                          controller: _terminalController,
+                          autofocus: true,
+                          theme: _astraTerminalTheme,
+                          textStyle: const TerminalStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 13,
+                          ),
+                          padding: const EdgeInsets.all(12),
+                          keyboardAppearance: Brightness.dark,
+                          onSecondaryTapDown: (details, offset) async {
+                            final selection = _terminalController.selection;
+                            if (selection != null) {
+                              final text = _terminal.buffer.getText(selection);
+                              _terminalController.clearSelection();
+                              await Clipboard.setData(
+                                ClipboardData(text: text),
+                              );
+                            } else {
+                              final data = await Clipboard.getData(
+                                'text/plain',
+                              );
+                              final text = data?.text;
+                              if (text != null) _terminal.paste(text);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

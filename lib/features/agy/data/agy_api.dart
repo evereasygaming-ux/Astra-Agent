@@ -41,6 +41,17 @@ class AgyApi {
         : const AgyHubStatus();
   }
 
+  Future<AgyQuotaSummary> quotaSummary({bool refresh = false}) async {
+    final json = await _request(
+      'GET',
+      '/api/agy/quotas${refresh ? '?refresh=1' : ''}',
+      timeout: const Duration(seconds: 25),
+    );
+    final error = json['error']?.toString();
+    if (error != null && error.isNotEmpty) throw AgyApiException(error);
+    return AgyQuotaSummary.fromJson(json);
+  }
+
   Future<void> startLogin() async {
     final json = await _request(
       'POST',

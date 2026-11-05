@@ -252,6 +252,32 @@ func stringValue(value any) string {
 	return text
 }
 
+// QuotaSummary returns the authenticated user's Antigravity quota windows.
+func (c *Client) QuotaSummary(ctx context.Context, forceRefresh bool) (map[string]any, error) {
+	resp, err := c.call(
+		ctx,
+		"RetrieveUserQuotaSummary",
+		"RetrieveUserQuotaSummaryRequest",
+		"RetrieveUserQuotaSummaryResponse",
+		map[string]any{
+			"request":      map[string]any{},
+			"forceRefresh": forceRefresh,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	root, err := toJSONMap(resp)
+	if err != nil {
+		return nil, err
+	}
+	summary, _ := root["response"].(map[string]any)
+	if summary == nil {
+		return nil, errors.New("Antigravity returned an empty quota summary")
+	}
+	return summary, nil
+}
+
 func (c *Client) StartCascade(ctx context.Context, conversationID, workspace, model string) error {
 	workspaceURI := ""
 	if workspace != "" {

@@ -10,17 +10,23 @@ class AgyState {
     this.runtime,
     this.hub,
     this.loginUrl,
+    this.quota,
     this.loading = false,
     this.installing = false,
+    this.quotaLoading = false,
     this.error,
+    this.quotaError,
   });
 
   final AgyRuntimeStatus? runtime;
   final AgyHubStatus? hub;
   final AgyLoginUrl? loginUrl;
+  final AgyQuotaSummary? quota;
   final bool loading;
   final bool installing;
+  final bool quotaLoading;
   final String? error;
+  final String? quotaError;
 
   bool get installed => runtime?.installed == true;
   bool get hubOnline => hub?.online == true;
@@ -30,18 +36,26 @@ class AgyState {
     AgyRuntimeStatus? runtime,
     AgyHubStatus? hub,
     AgyLoginUrl? loginUrl,
+    AgyQuotaSummary? quota,
     bool? loading,
     bool? installing,
+    bool? quotaLoading,
     String? error,
+    String? quotaError,
     bool clearError = false,
+    bool clearQuota = false,
+    bool clearQuotaError = false,
   }) {
     return AgyState(
       runtime: runtime ?? this.runtime,
       hub: hub ?? this.hub,
       loginUrl: loginUrl ?? this.loginUrl,
+      quota: clearQuota ? null : quota ?? this.quota,
       loading: loading ?? this.loading,
       installing: installing ?? this.installing,
+      quotaLoading: quotaLoading ?? this.quotaLoading,
       error: clearError ? null : error ?? this.error,
+      quotaError: clearQuotaError ? null : quotaError ?? this.quotaError,
     );
   }
 }
@@ -64,6 +78,9 @@ class AgyController extends Notifier<AgyState> {
   Future<void> refresh() async {
     if (state.loading) return;
     state = state.copyWith(loading: true, clearError: true);
+    if (!state.quotaLoading) {
+      Future.microtask(() => refreshQuota());
+    }
     try {
       final runtime = await _api.runtime();
       AgyHubStatus? hub;
@@ -93,12 +110,31 @@ class AgyController extends Notifier<AgyState> {
     }
   }
 
+  Future<void> refreshQuota({bool force = false}) async {
+    if (state.quotaLoading) return;
+    state = state.copyWith(quotaLoading: true, clearQuotaError: true);
+    try {
+      final quota = await _api.quotaSummary(refresh: force);
+      state = state.copyWith(
+        quota: quota,
+        quotaLoading: false,
+        clearQuotaError: true,
+      );
+    } catch (error) {
+      state = state.copyWith(quotaLoading: false, quotaError: error.toString());
+    }
+  }
+
   Future<void> install() async {
     if (state.installing) return;
     state = state.copyWith(installing: true, clearError: true);
     try {
       final runtime = await _api.install();
-      state = state.copyWith(runtime: runtime, installing: false, clearError: true);
+      state = state.copyWith(
+        runtime: runtime,
+        installing: false,
+        clearError: true,
+      );
       await refresh();
     } catch (error) {
       state = state.copyWith(installing: false, error: error.toString());
@@ -144,5 +180,6 @@ class AgyController extends Notifier<AgyState> {
   }
 }
 
-final agyControllerProvider =
-    NotifierProvider<AgyController, AgyState>(AgyController.new);
+final agyControllerProvider = NotifierProvider<AgyController, AgyState>(
+  AgyController.new,
+);

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../app/theme/app_theme.dart';
+import '../../app/theme/app_panel.dart';
 import '../bridge/data/bridge_channel.dart';
 import '../bridge/presentation/bridge_controller.dart';
 
@@ -601,22 +602,28 @@ class _GitScreenState extends ConsumerState<GitScreen> {
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: project,
-                    decoration: const InputDecoration(labelText: 'Workspace'),
-                    items: _projects
-                        .map(
-                          (item) => DropdownMenuItem(
-                            value: item.path,
-                            child: Text(
-                              item.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                  AppPanel(
+                    padding: const EdgeInsets.all(10),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: project,
+                      decoration: const InputDecoration(
+                        labelText: 'Git workspace',
+                        prefixIcon: Icon(Icons.folder_open_outlined),
+                      ),
+                      items: _projects
+                          .map(
+                            (item) => DropdownMenuItem(
+                              value: item.path,
+                              child: Text(
+                                item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _busy ? null : _selectProject,
+                          )
+                          .toList(),
+                      onChanged: _busy ? null : _selectProject,
+                    ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
@@ -648,6 +655,8 @@ class _GitScreenState extends ConsumerState<GitScreen> {
                   else if (!status.isGitRepo)
                     _NotRepository(onInit: _busy ? null : _initRepository)
                   else ...[
+                    _GitOverview(status: status),
+                    const SizedBox(height: 10),
                     _BranchCard(
                       status: status,
                       branches: _branches,
@@ -1267,6 +1276,104 @@ Map<String, dynamic> _decodeOAuthResponse(http.Response response) {
   final decoded = jsonDecode(response.body);
   if (decoded is! Map) throw const _GitException('Invalid GitHub response.');
   return decoded.cast<String, dynamic>();
+}
+
+class _GitOverview extends StatelessWidget {
+  const _GitOverview({required this.status});
+
+  final _GitStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _GitMetric(
+            label: 'STAGED',
+            value: status.staged.length,
+            color: AppTheme.cyan,
+            icon: Icons.check_circle_outline,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _GitMetric(
+            label: 'CHANGES',
+            value: status.unstaged.length + status.untracked.length,
+            color: AppTheme.accent,
+            icon: Icons.edit_note,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _GitMetric(
+            label: 'AHEAD',
+            value: status.unpushedCount,
+            color: AppTheme.accentAlt,
+            icon: Icons.upload_outlined,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GitMetric extends StatelessWidget {
+  const _GitMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: AppTheme.outline),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 17),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$value',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.muted,
+                    fontSize: 8,
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _BranchCard extends StatelessWidget {

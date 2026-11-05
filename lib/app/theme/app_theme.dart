@@ -38,10 +38,17 @@ class AppTheme {
         displayColor: Colors.white,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
         foregroundColor: Colors.white,
+        titleTextStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 19,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.25,
+        ),
       ),
       snackBarTheme: const SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
@@ -52,6 +59,11 @@ class AppTheme {
       listTileTheme: const ListTileThemeData(
         iconColor: accent,
         textColor: Colors.white,
+        tileColor: surface,
+        contentPadding: EdgeInsets.symmetric(horizontal: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
       ),
       cardTheme: CardThemeData(
         color: surface,
@@ -81,6 +93,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: accentAlt,
           foregroundColor: Colors.white,
+          minimumSize: const Size(0, 46),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
@@ -90,6 +103,7 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: Colors.white,
           side: const BorderSide(color: outline),
+          minimumSize: const Size(0, 46),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),

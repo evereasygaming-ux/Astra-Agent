@@ -301,6 +301,7 @@ func main() {
 	mux.HandleFunc("/api/auth/start-login", h.StartLoginHandler)
 	mux.HandleFunc("/api/models", h.ModelsHandler)
 	mux.HandleFunc("/api/models/refresh", h.ModelsHandler)
+	mux.HandleFunc("/api/agy/quotas", h.AgyQuotasHandler)
 	mux.HandleFunc("/api/quotas", h.QuotasHandler)
 	mux.HandleFunc("/api/quotas/refresh", h.QuotasHandler)
 	mux.HandleFunc("/api/instances", h.InstancesHandler)

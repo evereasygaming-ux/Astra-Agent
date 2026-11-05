@@ -151,6 +151,27 @@ func (h *Handler) ModelsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"models": []interface{}{}})
 }
 
+func (h *Handler) AgyQuotasHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	if h.AgyClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "Antigravity client is unavailable",
+		})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	summary, err := h.AgyClient.QuotaSummary(ctx, r.URL.Query().Get("refresh") == "1")
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
 func (h *Handler) QuotasHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{})
 }

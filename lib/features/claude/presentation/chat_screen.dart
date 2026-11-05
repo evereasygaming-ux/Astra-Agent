@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../app/theme/app_theme.dart';
+import '../../../app/theme/app_panel.dart';
 import '../../bridge/data/bridge_channel.dart';
 import '../../bridge/presentation/bridge_controller.dart';
 import '../../editor/workspace_folder_picker.dart';
@@ -1083,91 +1084,79 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: _agent,
-                    decoration: const InputDecoration(
-                      labelText: 'Agent',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Claude Code',
-                        child: Text('Claude Code'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Antigravity',
-                        child: Text('Antigravity'),
-                      ),
-                    ],
-                    onChanged: _sending || _sessionId != null
-                        ? null
-                        : _selectAgent,
-                  ),
-                  const SizedBox(height: 8),
-                  _loadingWorkspaces
-                      ? const LinearProgressIndicator()
-                      : DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          initialValue: _workspace,
-                          decoration: InputDecoration(
-                            labelText: 'Workspace',
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                            suffixIcon: IconButton(
-                              tooltip: 'Add workspace folder',
-                              onPressed: _sending || _sessionId != null
-                                  ? null
-                                  : _addWorkspace,
-                              icon: const Icon(
-                                Icons.create_new_folder_outlined,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                          items: _workspaces
-                              .map(
-                                (item) => DropdownMenuItem(
-                                  value: item.path,
-                                  child: Text(
-                                    item.name,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: _sending || _sessionId != null
-                              ? null
-                              : _selectWorkspace,
+              child: AppPanel(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Column(
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.tune_rounded,
+                          color: AppTheme.cyan,
+                          size: 17,
                         ),
-                  if (_agent == 'Antigravity') ...[
+                        SizedBox(width: 8),
+                        Text(
+                          'SESSION SETUP',
+                          style: TextStyle(
+                            color: AppTheme.muted,
+                            fontSize: 10,
+                            letterSpacing: 1.1,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: _agent,
+                      decoration: const InputDecoration(
+                        labelText: 'Agent',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'Claude Code',
+                          child: Text('Claude Code'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Antigravity',
+                          child: Text('Antigravity'),
+                        ),
+                      ],
+                      onChanged: _sending || _sessionId != null
+                          ? null
+                          : _selectAgent,
+                    ),
                     const SizedBox(height: 8),
-                    _loadingModels
+                    _loadingWorkspaces
                         ? const LinearProgressIndicator()
                         : DropdownButtonFormField<String>(
                             isExpanded: true,
-                            initialValue: _selectedModel,
+                            initialValue: _workspace,
                             decoration: InputDecoration(
-                              labelText: 'Antigravity model',
+                              labelText: 'Workspace',
                               border: const OutlineInputBorder(),
                               isDense: true,
                               suffixIcon: IconButton(
-                                tooltip: 'Refresh models',
-                                onPressed: _sessionId != null || _loadingModels
+                                tooltip: 'Add workspace folder',
+                                onPressed: _sending || _sessionId != null
                                     ? null
-                                    : _loadModels,
-                                icon: const Icon(Icons.refresh, size: 18),
+                                    : _addWorkspace,
+                                icon: const Icon(
+                                  Icons.create_new_folder_outlined,
+                                  size: 18,
+                                ),
                               ),
                             ),
-                            items: _models
+                            items: _workspaces
                                 .map(
-                                  (model) => DropdownMenuItem(
-                                    value: model.id,
+                                  (item) => DropdownMenuItem(
+                                    value: item.path,
                                     child: Text(
-                                      model.name,
+                                      item.name,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -1175,22 +1164,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                 .toList(),
                             onChanged: _sending || _sessionId != null
                                 ? null
-                                : (value) =>
-                                      setState(() => _selectedModel = value),
+                                : _selectWorkspace,
                           ),
-                  ],
-                  if (!bridge.isRunning)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'Start the bridge from Home before chatting.',
-                        style: const TextStyle(
-                          color: AppTheme.muted,
-                          fontSize: 12,
+                    if (_agent == 'Antigravity') ...[
+                      const SizedBox(height: 8),
+                      _loadingModels
+                          ? const LinearProgressIndicator()
+                          : DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              initialValue: _selectedModel,
+                              decoration: InputDecoration(
+                                labelText: 'Antigravity model',
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                                suffixIcon: IconButton(
+                                  tooltip: 'Refresh models',
+                                  onPressed:
+                                      _sessionId != null || _loadingModels
+                                      ? null
+                                      : _loadModels,
+                                  icon: const Icon(Icons.refresh, size: 18),
+                                ),
+                              ),
+                              items: _models
+                                  .map(
+                                    (model) => DropdownMenuItem(
+                                      value: model.id,
+                                      child: Text(
+                                        model.name,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: _sending || _sessionId != null
+                                  ? null
+                                  : (value) =>
+                                        setState(() => _selectedModel = value),
+                            ),
+                    ],
+                    if (!bridge.isRunning)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Start the bridge from Home before chatting.',
+                          style: const TextStyle(
+                            color: AppTheme.muted,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
             if (_error != null)
@@ -1207,9 +1232,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   Expanded(
                     child: _messages.isEmpty
                         ? const Center(
-                            child: Text(
-                              'Choose a workspace and send your first prompt.',
-                              style: TextStyle(color: AppTheme.muted),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.auto_awesome,
+                                  size: 34,
+                                  color: AppTheme.accentAlt,
+                                ),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Your next idea starts here',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                SizedBox(height: 5),
+                                Text(
+                                  'Choose a workspace and send your first prompt.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: AppTheme.muted),
+                                ),
+                              ],
                             ),
                           )
                         : ListView.builder(
@@ -1287,8 +1332,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ),
             SafeArea(
               top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                decoration: const BoxDecoration(
+                  color: AppTheme.surface,
+                  border: Border(top: BorderSide(color: AppTheme.outline)),
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -1590,8 +1639,13 @@ class _MessageBubble extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: isUser
-              ? AppTheme.accent.withValues(alpha: 0.14)
+              ? AppTheme.accent.withValues(alpha: 0.12)
               : Theme.of(context).colorScheme.surfaceContainerHighest,
+          border: Border.all(
+            color: (isUser ? AppTheme.accent : AppTheme.outline).withValues(
+              alpha: isUser ? 0.27 : 1,
+            ),
+          ),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),

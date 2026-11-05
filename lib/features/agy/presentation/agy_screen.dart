@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../bridge/domain/bridge_config.dart';
 import '../../bridge/presentation/bridge_controller.dart';
+import '../domain/agy_models.dart';
 import 'agy_controller.dart';
 
 class AgyScreen extends ConsumerStatefulWidget {
@@ -92,6 +93,14 @@ class _AgyScreenState extends ConsumerState<AgyScreen>
             const _TermuxRequiredPanel(),
           const SizedBox(height: 16),
           _HubPanel(agy: agy, enabled: bridge.isRunning && !busy),
+          const SizedBox(height: 12),
+          _UsagePanel(
+            agy: agy,
+            enabled: bridge.isRunning && !agy.quotaLoading,
+            onRefresh: () => ref
+                .read(agyControllerProvider.notifier)
+                .refreshQuota(force: true),
+          ),
           if (agy.error != null) ...[
             const SizedBox(height: 16),
             _Panel(
@@ -332,6 +341,208 @@ class _HubPanel extends ConsumerWidget {
   }
 }
 
+class _UsagePanel extends StatelessWidget {
+  const _UsagePanel({
+    required this.agy,
+    required this.enabled,
+    required this.onRefresh,
+  });
+
+  final AgyState agy;
+  final bool enabled;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final quota = agy.quota;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.data_usage_outlined, color: AppTheme.cyan),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Usage limits',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh usage limits',
+                onPressed: enabled ? onRefresh : null,
+                icon: agy.quotaLoading
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 20),
+              ),
+            ],
+          ),
+          if (agy.quotaLoading && quota == null)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(2, 8, 2, 4),
+              child: LinearProgressIndicator(minHeight: 2),
+            )
+          else if (agy.quotaError != null && quota == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                agy.quotaError!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            )
+          else if (quota == null || quota.groups.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Sign in to Antigravity and refresh to view your remaining usage.',
+                style: TextStyle(
+                  color: AppTheme.muted,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+            )
+          else ...[
+            if (quota.description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 12),
+                child: Text(
+                  quota.description,
+                  style: const TextStyle(
+                    color: AppTheme.muted,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.only(top: 2, bottom: 12),
+                child: Text(
+                  'Remaining capacity for your account',
+                  style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                ),
+              ),
+            for (final group in quota.groups) ...[
+              if (quota.groups.length > 1 || group.name.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: Text(
+                    group.name,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              for (final bucket in group.buckets)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _QuotaBucketTile(bucket: bucket),
+                ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _QuotaBucketTile extends StatelessWidget {
+  const _QuotaBucketTile({required this.bucket});
+
+  final AgyQuotaBucket bucket;
+
+  @override
+  Widget build(BuildContext context) {
+    final fraction = bucket.remainingFraction;
+    final percent = (fraction * 100).round();
+    final color = fraction <= 0.15
+        ? Theme.of(context).colorScheme.error
+        : fraction <= 0.35
+        ? AppTheme.accent
+        : AppTheme.cyan;
+    final reset = bucket.resetAt;
+    final resetLabel = reset == null
+        ? null
+        : 'Resets ${TimeOfDay.fromDateTime(reset).format(context)}';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceHigh,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  bucket.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '$percent% left',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: fraction,
+              minHeight: 6,
+              color: color,
+              backgroundColor: AppTheme.outline,
+            ),
+          ),
+          if (bucket.description.isNotEmpty || resetLabel != null) ...[
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    bucket.description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 10),
+                  ),
+                ),
+                if (resetLabel != null)
+                  Text(
+                    resetLabel,
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 10),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _Panel extends StatelessWidget {
   const _Panel({required this.child, this.color, this.borderColor});
 
@@ -346,9 +557,7 @@ class _Panel extends StatelessWidget {
       decoration: BoxDecoration(
         color: color ?? AppTheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: borderColor ?? Colors.white.withValues(alpha: 0.06),
-        ),
+        border: Border.all(color: borderColor ?? AppTheme.outline),
       ),
       child: child,
     );

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../app/theme/app_theme.dart';
+import '../../../app/theme/app_panel.dart';
 import '../bridge/data/bridge_service.dart';
 import '../bridge/presentation/bridge_controller.dart';
 import '../terminal/terminal_screen.dart';
@@ -368,32 +369,46 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: projectPath,
-                      decoration: const InputDecoration(labelText: 'Workspace'),
-                      items: _projects
-                          .map(
-                            (project) => DropdownMenuItem(
-                              value: project.path,
-                              child: Text(
-                                project.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                    child: AppPanel(
+                      padding: const EdgeInsets.all(10),
+                      child: DropdownButtonFormField<String>(
+                        initialValue: projectPath,
+                        decoration: const InputDecoration(
+                          labelText: 'Workspace',
+                          prefixIcon: Icon(Icons.folder_open_outlined),
+                        ),
+                        items: _projects
+                            .map(
+                              (project) => DropdownMenuItem(
+                                value: project.path,
+                                child: Text(
+                                  project.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _loadingProjects || _loadingDirectory
-                          ? null
-                          : _selectProject,
+                            )
+                            .toList(),
+                        onChanged: _loadingProjects || _loadingDirectory
+                            ? null
+                            : _selectProject,
+                      ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Add workspace folder',
-                    onPressed: _loadingProjects || _loadingDirectory
-                        ? null
-                        : _addWorkspace,
-                    icon: const Icon(Icons.create_new_folder_outlined),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.outline),
+                    ),
+                    child: IconButton(
+                      tooltip: 'Add workspace folder',
+                      onPressed: _loadingProjects || _loadingDirectory
+                          ? null
+                          : _addWorkspace,
+                      icon: const Icon(Icons.create_new_folder_outlined),
+                    ),
                   ),
                 ],
               ),
@@ -421,35 +436,52 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                 ),
               ] else ...[
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    IconButton(
-                      tooltip: 'Up one folder',
-                      onPressed:
-                          currentPath == null ||
-                              projectPath == null ||
-                              currentPath == projectPath ||
-                              _loadingDirectory
-                          ? null
-                          : () {
-                              final parent = Uri.file(currentPath)
-                                  .resolve('..')
-                                  .toFilePath();
-                              if (_isWithinProject(parent, projectPath)) {
-                                unawaited(_loadDirectory(parent));
-                              }
-                            },
-                      icon: const Icon(Icons.arrow_upward),
-                    ),
-                    Expanded(
-                      child: Text(
-                        currentPath ?? 'Select a workspace',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppTheme.muted),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.outline),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Up one folder',
+                        onPressed:
+                            currentPath == null ||
+                                projectPath == null ||
+                                currentPath == projectPath ||
+                                _loadingDirectory
+                            ? null
+                            : () {
+                                final parent = Uri.file(currentPath)
+                                    .resolve('..')
+                                    .toFilePath();
+                                if (_isWithinProject(parent, projectPath)) {
+                                  unawaited(_loadDirectory(parent));
+                                }
+                              },
+                        icon: const Icon(Icons.arrow_upward),
                       ),
-                    ),
-                  ],
+                      const Icon(
+                        Icons.folder_open_outlined,
+                        color: AppTheme.cyan,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          currentPath ?? 'Select a workspace',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppTheme.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
               if (_error != null)
@@ -482,7 +514,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                               entry.isDirectory
                                   ? Icons.folder_outlined
                                   : _fileIcon(entry.name),
-                              color: entry.isDirectory ? AppTheme.accent : null,
+                              color: entry.isDirectory
+                                  ? AppTheme.cyan
+                                  : AppTheme.accentAlt,
                             ),
                             title: Text(
                               entry.name,
