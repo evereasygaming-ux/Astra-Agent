@@ -394,6 +394,7 @@ func main() {
 
 	// WebSocket Endpoint
 	mux.HandleFunc("/ws", wsHub.ServeWS)
+	mux.HandleFunc("/terminal-ws", wsHub.ServeTerminalWS)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.ToLower(r.Header.Get("Upgrade")) == "websocket" {

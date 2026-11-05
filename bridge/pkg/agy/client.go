@@ -5,6 +5,7 @@ package agy
 import (
 	"context"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -344,6 +345,97 @@ func (c *Client) ResolveInteraction(ctx context.Context, cascadeID, trajectoryID
 		"interaction": interaction,
 	})
 	return err
+}
+
+func terminalWorkspaceURI(workspace string) string {
+	if workspace != "" && !strings.HasPrefix(workspace, "file://") {
+		return "file://" + workspace
+	}
+	return workspace
+}
+
+func (c *Client) CreateTerminal(ctx context.Context, workspace, conversationID string) (map[string]any, error) {
+	response, err := c.call(ctx, "CreateTerminal", "CreateTerminalRequest", "CreateTerminalResponse", map[string]any{
+		"workspaceUri":   terminalWorkspaceURI(workspace),
+		"conversationId": conversationID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	root, err := toJSONMap(response)
+	if err != nil {
+		return nil, err
+	}
+	terminal, ok := root["terminal"].(map[string]any)
+	if !ok || stringValue(terminal["terminalId"]) == "" {
+		return nil, errors.New("Antigravity did not return a terminal ID")
+	}
+	return terminal, nil
+}
+
+func (c *Client) SendTerminalInput(ctx context.Context, terminalID string, input []byte, inputStreamID string, inputOffset int64, cols, rows int) error {
+	request := map[string]any{
+		"terminalId":    terminalID,
+		"input":         base64.StdEncoding.EncodeToString(input),
+		"inputStreamId": inputStreamID,
+		"inputOffset":   inputOffset,
+	}
+	if cols > 0 && rows > 0 {
+		request["resize"] = map[string]any{"cols": cols, "rows": rows}
+	}
+	_, err := c.call(ctx, "SendTerminalInput", "SendTerminalInputRequest", "SendTerminalInputResponse", request)
+	return err
+}
+
+func (c *Client) CloseTerminal(ctx context.Context, terminalID string) error {
+	_, err := c.call(ctx, "CloseTerminal", "CloseTerminalRequest", "CloseTerminalResponse", map[string]any{
+		"terminalId": terminalID,
+	})
+	return err
+}
+
+func (c *Client) StreamTerminalOutput(ctx context.Context, terminalID string, onOutput func(map[string]any) error) error {
+	conn, callCtx, err := c.connection(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	req, err := newMessage("StreamTerminalOutputRequest", map[string]any{"terminalId": terminalID})
+	if err != nil {
+		return err
+	}
+	if fileDescriptorForMethod("StreamTerminalOutput") == nil {
+		return errors.New("Antigravity terminal stream is missing from the protocol schema")
+	}
+	stream, err := conn.NewStream(callCtx, &grpc.StreamDesc{ServerStreams: true}, methodPath("StreamTerminalOutput"))
+	if err != nil {
+		return fmt.Errorf("start Antigravity terminal output: %w", err)
+	}
+	if err := stream.SendMsg(req); err != nil {
+		return fmt.Errorf("send Antigravity terminal stream request: %w", err)
+	}
+	if err := stream.CloseSend(); err != nil {
+		return err
+	}
+	for {
+		response, err := newMessage("StreamTerminalOutputResponse", nil)
+		if err != nil {
+			return err
+		}
+		if err := stream.RecvMsg(response); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return fmt.Errorf("receive Antigravity terminal output: %w", err)
+		}
+		output, err := toJSONMap(response)
+		if err != nil {
+			return err
+		}
+		if err := onOutput(output); err != nil {
+			return err
+		}
+	}
 }
 
 func (c *Client) Stream(ctx context.Context, conversationID string, onUpdate func(map[string]any) error) error {

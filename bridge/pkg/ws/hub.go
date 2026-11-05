@@ -96,6 +96,111 @@ type clientMessage struct {
 	Target          string           `json:"target"`
 	Allow           bool             `json:"allow"`
 	Responses       []map[string]any `json:"responses"`
+	TerminalID      string           `json:"terminalId"`
+	Input           string           `json:"input"`
+	Cols            int              `json:"cols"`
+	Rows            int              `json:"rows"`
+}
+
+// ServeTerminalWS proxies an AGY Hub terminal over a dedicated WebSocket.
+func (h *Hub) ServeTerminalWS(w http.ResponseWriter, r *http.Request) {
+	rawConn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		fmt.Printf("[Terminal WS] Upgrade error: %v\n", err)
+		return
+	}
+	client := &ClientConn{ws: rawConn}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		_ = rawConn.Close()
+	}()
+	var terminalID string
+	inputStreamID := uuid.NewString()
+	var inputOffset int64
+	defer func() {
+		if terminalID != "" && h.AgyClient != nil {
+			closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer closeCancel()
+			_ = h.AgyClient.CloseTerminal(closeCtx, terminalID)
+		}
+	}()
+
+	for {
+		_, msgBytes, err := rawConn.ReadMessage()
+		if err != nil {
+			return
+		}
+		var msg clientMessage
+		if err := json.Unmarshal(msgBytes, &msg); err != nil {
+			continue
+		}
+		switch msg.Type {
+		case "terminal_create":
+			if h.AgyClient == nil {
+				_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": "Antigravity terminal is unavailable"})
+				continue
+			}
+			if terminalID != "" {
+				_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": "this connection already owns a terminal"})
+				continue
+			}
+			createCtx, createCancel := context.WithTimeout(ctx, 20*time.Second)
+			terminal, err := h.AgyClient.CreateTerminal(createCtx, msg.WorkspaceDir, msg.ConversationID)
+			createCancel()
+			if err != nil {
+				_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": err.Error()})
+				continue
+			}
+			terminalID = stringValue(terminal["terminalId"])
+			_ = client.SendJSON(map[string]any{"type": "terminal_created", "terminal": terminal})
+			go h.streamTerminal(ctx, client, terminalID)
+
+		case "terminal_input", "terminal_resize":
+			if terminalID == "" || h.AgyClient == nil {
+				_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": "terminal is not connected"})
+				continue
+			}
+			input := []byte(nil)
+			if msg.Type == "terminal_input" {
+				input = []byte(msg.Input)
+			}
+			inputCtx, inputCancel := context.WithTimeout(ctx, 15*time.Second)
+			err := h.AgyClient.SendTerminalInput(inputCtx, terminalID, input, inputStreamID, inputOffset, msg.Cols, msg.Rows)
+			inputCancel()
+			if err != nil {
+				_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": err.Error()})
+			} else {
+				inputOffset += int64(len(input))
+			}
+
+		case "terminal_close":
+			if terminalID != "" && h.AgyClient != nil {
+				closeCtx, closeCancel := context.WithTimeout(ctx, 10*time.Second)
+				err := h.AgyClient.CloseTerminal(closeCtx, terminalID)
+				closeCancel()
+				if err != nil {
+					_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": err.Error()})
+				}
+				terminalID = ""
+			}
+			_ = client.SendJSON(map[string]any{"type": "terminal_closed"})
+			return
+		}
+	}
+}
+
+func (h *Hub) streamTerminal(ctx context.Context, client *ClientConn, terminalID string) {
+	err := h.AgyClient.StreamTerminalOutput(ctx, terminalID, func(output map[string]any) error {
+		return client.SendJSON(map[string]any{"type": "terminal_output", "terminalId": terminalID, "data": output})
+	})
+	if err != nil && ctx.Err() == nil {
+		_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": err.Error()})
+		return
+	}
+	if ctx.Err() == nil {
+		_ = client.SendJSON(map[string]any{"type": "terminal_exit", "terminalId": terminalID})
+	}
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {

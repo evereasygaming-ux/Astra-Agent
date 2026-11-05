@@ -175,8 +175,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 _ActionCard(
                   icon: Icons.terminal,
                   title: 'Terminal',
-                  subtitle: 'Linux PTY',
-                  onTap: () => _comingSoon(context, 'Terminal'),
+                  subtitle: 'Antigravity terminal',
+                  onTap: () => context.push('/terminal'),
                 ),
                 _ActionCard(
                   icon: Icons.code,
