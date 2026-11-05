@@ -141,6 +141,10 @@
   paths, blocks back navigation during active work, and exposes history as a
   resume path. Chat selectors use full-width rows on narrow screens. Flutter
   analysis and Go build pass; device validation is pending.
+- Browser card now opens an in-app WebView preview with an address bar, back,
+  forward, reload, progress, and load error feedback. It starts at
+  `http://127.0.0.1:3000` and accepts local HTTP or HTTPS URLs. Flutter analysis
+  passes; device validation is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

@@ -40,12 +40,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  void _comingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature is coming in the next phase')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final bridge = ref.watch(bridgeControllerProvider);
@@ -194,18 +188,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   icon: Icons.public,
                   title: 'Browser',
                   subtitle: 'Localhost preview',
-                  onTap: () => _comingSoon(context, 'Browser'),
+                  onTap: () => context.push('/browser'),
                 ),
               ],
             ),
             const SizedBox(height: 24),
             _SectionTitle(title: 'Roadmap'),
             const SizedBox(height: 12),
-            _RoadmapCard(
-              items: const [
-                'Browser preview and MCP plugins',
-              ],
-            ),
+            _RoadmapCard(items: const ['MCP/plugin support']),
             const SizedBox(height: 24),
             Center(
               child: Text(
