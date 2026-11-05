@@ -125,35 +125,17 @@ class _PluginListState extends ConsumerState<_PluginList> {
   }
 
   Future<void> _installFromGitHub() async {
-    final repoController = TextEditingController(
-      text: 'evereasygaming-ux/AstraAgent-Plugins',
-    );
     final repo = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Install from GitHub'),
-        content: TextField(
-          controller: repoController,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
-            labelText: 'Repository',
-            hintText: 'evereasygaming-ux/AstraAgent-Plugins',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, repoController.text.trim()),
-            child: const Text('Find plugins'),
-          ),
-        ],
+      builder: (context) => const _PluginInputDialog(
+        title: 'Install from GitHub',
+        label: 'Repository',
+        initialValue: 'evereasygaming-ux/AstraAgent-Plugins',
+        hint: 'owner/repo or GitHub URL',
+        submitLabel: 'Find plugins',
+        keyboardType: TextInputType.url,
       ),
     );
-    repoController.dispose();
     if (repo == null || repo.isEmpty || !mounted) return;
     setState(() => _busy = true);
     try {
@@ -192,31 +174,15 @@ class _PluginListState extends ConsumerState<_PluginList> {
         ),
       );
       if (selected == null || !mounted) return;
-      final folderController = TextEditingController(
-        text: _folderName(selected.name),
-      );
       final folder = await showDialog<String>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Install ${selected.name}'),
-          content: TextField(
-            controller: folderController,
-            decoration: const InputDecoration(labelText: 'Install folder'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.pop(context, folderController.text.trim()),
-              child: const Text('Install'),
-            ),
-          ],
+        builder: (context) => _PluginInputDialog(
+          title: 'Install ${selected.name}',
+          label: 'Install folder',
+          initialValue: _folderName(selected.name),
+          submitLabel: 'Install',
         ),
       );
-      folderController.dispose();
       if (folder == null || folder.isEmpty || !mounted) return;
       await _request(ref, 'POST', '/api/custom-plugins/repo/install', {
         'repo': repo,
@@ -578,6 +544,66 @@ class _EmptyState extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+class _PluginInputDialog extends StatefulWidget {
+  const _PluginInputDialog({
+    required this.title,
+    required this.label,
+    required this.initialValue,
+    required this.submitLabel,
+    this.hint,
+    this.keyboardType,
+  });
+
+  final String title;
+  final String label;
+  final String initialValue;
+  final String submitLabel;
+  final String? hint;
+  final TextInputType? keyboardType;
+
+  @override
+  State<_PluginInputDialog> createState() => _PluginInputDialogState();
+}
+
+class _PluginInputDialogState extends State<_PluginInputDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    FocusScope.of(context).unfocus();
+    Navigator.pop(context, _controller.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: TextField(
+      controller: _controller,
+      autofocus: widget.keyboardType != null,
+      keyboardType: widget.keyboardType,
+      decoration: InputDecoration(
+        labelText: widget.label,
+        hintText: widget.hint,
+      ),
+      onSubmitted: (_) => _submit(),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _submit, child: Text(widget.submitLabel)),
+    ],
   );
 }
 
