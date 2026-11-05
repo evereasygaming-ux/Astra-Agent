@@ -145,6 +145,10 @@
   forward, reload, progress, and load error feedback. It starts at
   `http://127.0.0.1:3000` and accepts local HTTP or HTTPS URLs. Flutter analysis
   passes; device validation is pending.
+- Localhost connection errors now explain that a dev server must be running;
+  Browser can open Terminal, and Terminal can push Browser above it so the
+  server session stays alive while previewing. Static HTML can be served with
+  `python3 -m http.server 3000` from the workspace.
 - Attachments remain future work.
 
 ## Collaboration preferences

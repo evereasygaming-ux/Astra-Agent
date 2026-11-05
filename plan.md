@@ -133,7 +133,8 @@ This status is a static source review. No build or tests were run for this plan.
   open while a task is running. Stack narrow chat selectors to prevent overflow.
   Flutter analysis and Go build pass; device validation is pending.
 - [x] Add in-app browser preview with an address bar and back, forward, reload,
-  and loading/error feedback. Flutter analysis passes; device validation pending.
+  loading/error feedback, and a Terminal shortcut for starting the preview server.
+  Flutter analysis passes; device validation pending.
 - Evaluate MCP/plugin support after browser preview is validated.
 
 ### Phase 4 - Distribution

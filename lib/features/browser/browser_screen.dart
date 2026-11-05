@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../app/theme/app_theme.dart';
@@ -219,11 +220,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
           if (_error != null)
             MaterialBanner(
               content: Text(
-                'Could not load the page: $_error. Make sure the web server is running and reachable.',
+                'No web server responded at this address ($_error). Start the project server in Terminal, then reload. For a plain HTML folder, run: python3 -m http.server 3000',
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
               actions: [
+                TextButton(
+                  onPressed: () => context.push('/terminal'),
+                  child: const Text('Open Terminal'),
+                ),
                 TextButton(onPressed: _reload, child: const Text('Retry')),
               ],
             ),

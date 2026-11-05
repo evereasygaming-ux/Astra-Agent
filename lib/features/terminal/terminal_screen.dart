@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../app/theme/app_theme.dart';
@@ -215,6 +216,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       appBar: AppBar(
         title: const Text('Terminal'),
         actions: [
+          IconButton(
+            tooltip: 'Open browser preview',
+            onPressed: () => context.push('/browser'),
+            icon: const Icon(Icons.public),
+          ),
           IconButton(
             tooltip: 'Reconnect',
             onPressed: _connecting || _loading ? null : _connect,
