@@ -116,8 +116,8 @@
   `GITHUB_OAUTH_CLIENT_ID` Dart define and is configured in the GitHub Actions
   workflow. The OAuth App must have Device Flow enabled. The bridge validates the
   access token, stores it outside repositories with owner-only file permissions,
-  and supplies it through askpass for HTTPS github.com remotes. Device validation
-  is pending.
+  and supplies it through askpass for HTTPS github.com remotes. The user confirmed
+  GitHub connect succeeds on device after the polling request/retry fix.
 - Attachments remain future work.
 
 ## Collaboration preferences

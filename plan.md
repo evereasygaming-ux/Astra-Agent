@@ -117,7 +117,7 @@ This status is a static source review. No build or tests were run for this plan.
   works in the installed APK.
 - [x] Add Git workspace status, file diffs, stage/unstage, stage all, repository
   initialization, commits, and GitHub OAuth device sign-in. Flutter analysis and
-  Go compilation pass; OAuth Device Flow and device validation pending.
+  Go compilation pass; user confirmed OAuth sign-in works on device.
 - Evaluate browser preview and MCP/plugin support after core workflows work.
 
 ### Phase 4 - Distribution
