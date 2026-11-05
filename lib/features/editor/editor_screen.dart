@@ -19,17 +19,32 @@ class EditorScreen extends ConsumerStatefulWidget {
 class _EditorScreenState extends ConsumerState<EditorScreen> {
   List<_Project> _projects = [];
   List<_FileEntry> _entries = [];
+  List<_SearchMatch> _searchMatches = [];
+  final _searchController = TextEditingController();
+  Timer? _searchTimer;
   String? _projectPath;
   String? _currentPath;
   String? _error;
+  String? _searchError;
   bool _loadingProjects = true;
   bool _loadingDirectory = false;
+  bool _searchMode = false;
+  bool _loadingSearch = false;
+  bool _searchTruncated = false;
   int _directoryRequest = 0;
+  int _searchRequest = 0;
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadProjects());
+  }
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProjects() async {
@@ -125,7 +140,89 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       _projectPath = path;
       _entries = [];
     });
-    await _loadDirectory(path);
+    if (_searchMode && _searchController.text.trim().isNotEmpty) {
+      await _search(_searchController.text);
+    } else {
+      await _loadDirectory(path);
+    }
+  }
+
+  void _toggleSearch() {
+    _searchTimer?.cancel();
+    setState(() {
+      _searchMode = !_searchMode;
+      _searchError = null;
+      _searchMatches = [];
+      _searchTruncated = false;
+      _loadingSearch = false;
+    });
+    if (!_searchMode) _searchController.clear();
+  }
+
+  void _onSearchChanged(String query) {
+    _searchTimer?.cancel();
+    ++_searchRequest;
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchMatches = [];
+        _searchError = null;
+        _loadingSearch = false;
+        _searchTruncated = false;
+      });
+      return;
+    }
+    setState(() {
+      _loadingSearch = true;
+      _searchError = null;
+    });
+    _searchTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(_search(query));
+    });
+  }
+
+  Future<void> _search(String query) async {
+    final project = _projectPath;
+    final request = ++_searchRequest;
+    if (project == null || query.trim().isEmpty) return;
+    setState(() {
+      _loadingSearch = true;
+      _searchError = null;
+    });
+    try {
+      final bridge = ref.read(bridgeServiceProvider);
+      final uri = (await bridge.resolve('/api/search')).replace(
+        queryParameters: {'q': query.trim(), 'dir': project, 'limit': '200'},
+      );
+      final response = await http
+          .get(uri, headers: await bridge.authHeaders())
+          .timeout(const Duration(seconds: 25));
+      if (response.statusCode != 200) {
+        throw _EditorException(_responseError(response));
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const _EditorException(
+          'The bridge returned invalid search results.',
+        );
+      }
+      final matches = (decoded['matches'] as List? ?? const [])
+          .whereType<Map>()
+          .map(_SearchMatch.fromJson)
+          .toList();
+      if (!mounted || request != _searchRequest) return;
+      setState(() {
+        _searchMatches = matches;
+        _searchTruncated = decoded['truncated'] == true;
+        _loadingSearch = false;
+      });
+    } catch (error) {
+      if (mounted && request == _searchRequest) {
+        setState(() {
+          _loadingSearch = false;
+          _searchError = error.toString();
+        });
+      }
+    }
   }
 
   Future<void> _openFile(_FileEntry entry) async {
@@ -140,7 +237,12 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         ),
       ),
     );
-    if (mounted) unawaited(_loadDirectory(_currentPath ?? _projectPath!));
+    if (!mounted) return;
+    if (_searchMode && _searchController.text.trim().isNotEmpty) {
+      unawaited(_search(_searchController.text));
+    } else {
+      unawaited(_loadDirectory(_currentPath ?? _projectPath!));
+    }
   }
 
   String _responseError(http.Response response) {
@@ -165,8 +267,13 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         title: const Text('Editor'),
         actions: [
           IconButton(
+            tooltip: _searchMode ? 'Close search' : 'Search in workspace',
+            onPressed: _projectPath == null ? null : _toggleSearch,
+            icon: Icon(_searchMode ? Icons.close : Icons.search),
+          ),
+          IconButton(
             tooltip: 'Refresh files',
-            onPressed: currentPath == null || _loadingDirectory
+            onPressed: _searchMode || currentPath == null || _loadingDirectory
                 ? null
                 : () => _loadDirectory(currentPath),
             icon: const Icon(Icons.refresh),
@@ -197,37 +304,61 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                     ? null
                     : _selectProject,
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Up one folder',
-                    onPressed:
-                        currentPath == null ||
-                            projectPath == null ||
-                            currentPath == projectPath ||
-                            _loadingDirectory
+              if (_searchMode) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  autocorrect: false,
+                  onChanged: _onSearchChanged,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Search code in this workspace',
+                    suffixIcon: _searchController.text.isEmpty
                         ? null
-                        : () {
-                            final parent = Uri.file(currentPath)
-                                .resolve('..')
-                                .toFilePath();
-                            if (_isWithinProject(parent, projectPath)) {
-                              unawaited(_loadDirectory(parent));
-                            }
-                          },
-                    icon: const Icon(Icons.arrow_upward),
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _searchController.clear();
+                              _onSearchChanged('');
+                            },
+                            icon: const Icon(Icons.clear),
+                          ),
                   ),
-                  Expanded(
-                    child: Text(
-                      currentPath ?? 'Select a workspace',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppTheme.muted),
+                ),
+              ] else ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Up one folder',
+                      onPressed:
+                          currentPath == null ||
+                              projectPath == null ||
+                              currentPath == projectPath ||
+                              _loadingDirectory
+                          ? null
+                          : () {
+                              final parent = Uri.file(currentPath)
+                                  .resolve('..')
+                                  .toFilePath();
+                              if (_isWithinProject(parent, projectPath)) {
+                                unawaited(_loadDirectory(parent));
+                              }
+                            },
+                      icon: const Icon(Icons.arrow_upward),
                     ),
-                  ),
-                ],
-              ),
+                    Expanded(
+                      child: Text(
+                        currentPath ?? 'Select a workspace',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppTheme.muted),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               if (_error != null)
                 MaterialBanner(
                   content: Text(_error!),
@@ -242,7 +373,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                 ),
               const SizedBox(height: 4),
               Expanded(
-                child: _loadingProjects || _loadingDirectory
+                child: _searchMode
+                    ? _buildSearchResults()
+                    : _loadingProjects || _loadingDirectory
                     ? const Center(child: CircularProgressIndicator())
                     : _entries.isEmpty
                     ? const Center(child: Text('This folder is empty.'))
@@ -284,6 +417,65 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSearchResults() {
+    if (_loadingSearch && _searchMatches.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_searchError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(_searchError!, textAlign: TextAlign.center),
+        ),
+      );
+    }
+    if (_searchController.text.trim().isEmpty) {
+      return const Center(child: Text('Type to search this workspace.'));
+    }
+    if (_searchMatches.isEmpty) {
+      return const Center(child: Text('No matching lines found.'));
+    }
+    return ListView.separated(
+      itemCount: _searchMatches.length + (_searchTruncated ? 1 : 0),
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        if (_searchTruncated && index == 0) {
+          return const ListTile(
+            dense: true,
+            leading: Icon(Icons.info_outline),
+            title: Text('Showing the first 200 matches.'),
+          );
+        }
+        final match = _searchMatches[index - (_searchTruncated ? 1 : 0)];
+        return ListTile(
+          dense: true,
+          leading: const Icon(Icons.code),
+          title: Text(
+            match.relativePath,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            '${match.lineNumber}: ${match.lineText}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+          onTap: () => unawaited(
+            _openFile(
+              _FileEntry(
+                name: match.relativePath.split('/').last,
+                path: match.path,
+                isDirectory: false,
+                size: 0,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -618,6 +810,27 @@ class _FileEntry {
     path: value['path']?.toString() ?? '',
     isDirectory: value['isDir'] == true,
     size: int.tryParse(value['size']?.toString() ?? '') ?? 0,
+  );
+}
+
+class _SearchMatch {
+  const _SearchMatch({
+    required this.path,
+    required this.relativePath,
+    required this.lineNumber,
+    required this.lineText,
+  });
+
+  final String path;
+  final String relativePath;
+  final int lineNumber;
+  final String lineText;
+
+  factory _SearchMatch.fromJson(Map value) => _SearchMatch(
+    path: value['path']?.toString() ?? '',
+    relativePath: value['relativePath']?.toString() ?? '',
+    lineNumber: int.tryParse(value['lineNumber']?.toString() ?? '') ?? 0,
+    lineText: value['lineText']?.toString() ?? '',
   );
 }
 

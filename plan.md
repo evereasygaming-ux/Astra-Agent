@@ -124,6 +124,9 @@ This status is a static source review. No build or tests were run for this plan.
   switch/create controls. Flutter analysis passes; device validation pending.
 - [x] Add GitHub pull request listing and creation from a clean, pushed branch.
   Flutter analysis and Go build pass; device validation is pending.
+- [x] Add project-wide literal code search to the workspace editor. Results show
+  file, line, and matching text; tapping a result opens the file. Flutter analysis
+  and Go build pass; device validation is pending.
 - Evaluate browser preview and MCP/plugin support after core workflows work.
 
 ### Phase 4 - Distribution

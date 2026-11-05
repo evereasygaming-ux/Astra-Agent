@@ -204,7 +204,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _RoadmapCard(
               items: const [
                 'Browser preview and MCP plugins',
-                'Project files and code search',
               ],
             ),
             const SizedBox(height: 24),

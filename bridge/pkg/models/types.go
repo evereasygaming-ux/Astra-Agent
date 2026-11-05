@@ -207,7 +207,7 @@ type FileNode struct {
 // CreateProjectReq represents a new project creation request.
 type CreateProjectReq struct {
 	Name     string `json:"name"`
-	Template string `json:"template"` // python, node, web, kotlin, cpp, blank
+	Template string `json:"template"`       // python, node, web, kotlin, cpp, blank
 	Path     string `json:"path,omitempty"` // custom parent or target directory
 }
 
@@ -236,8 +236,8 @@ type FileOpReq struct {
 
 // SearchMatch represents a ripgrep code search match.
 type SearchMatch struct {
-	Path       string `json:"path"`
-	LineNumber int    `json:"lineNumber"`
-	LineText   string `json:"lineText"`
+	Path         string `json:"path"`
+	RelativePath string `json:"relativePath"`
+	LineNumber   int    `json:"lineNumber"`
+	LineText     string `json:"lineText"`
 }
-

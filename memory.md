@@ -130,6 +130,11 @@
   default branch. Bridge checks the OAuth token, GitHub origin, clean worktree,
   and published upstream before creation. Flutter analysis and Go build pass;
   device validation is pending.
+- Workspace editor now has debounced literal code search, capped at 200 results;
+  hidden project files are included while Git internals and common dependency or
+  build output directories are excluded. Results include file and line context
+  and open the matching file. Flutter analysis and Go build pass; device
+  validation is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

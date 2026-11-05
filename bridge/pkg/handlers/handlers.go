@@ -1610,34 +1610,97 @@ func copyRecursive(src, dst string) error {
 }
 
 func (h *Handler) FileSearchHandler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
-	dir := r.URL.Query().Get("dir")
-	if dir == "" {
-		dir = h.Cfg.ProjectsBaseDir
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" || len(query) > 300 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Enter a search term up to 300 characters."})
+		return
+	}
+	dir := filepath.Clean(expandHome(strings.TrimSpace(r.URL.Query().Get("dir"))))
+	if dir == "." || dir == "" {
+		dir = filepath.Clean(expandHome(h.Cfg.ProjectsBaseDir))
+	}
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Workspace directory does not exist."})
+		return
 	}
 
-	cmd := exec.Command("rg", "-n", "--no-heading", query, dir)
-	output, _ := cmd.Output()
-
-	var matches []models.SearchMatch
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		parts := strings.SplitN(line, ":", 3)
-		if len(parts) == 3 {
-			lineNum := 0
-			fmt.Sscanf(parts[1], "%d", &lineNum)
-			matches = append(matches, models.SearchMatch{
-				Path:       parts[0],
-				LineNumber: lineNum,
-				LineText:   strings.TrimSpace(parts[2]),
-			})
+	limit := 200
+	if requested, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && requested > 0 && requested < limit {
+		limit = requested
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	args := []string{
+		"--json", "--line-number", "--fixed-strings", "--hidden", "--max-columns=1000",
+		"--max-columns-preview", "--glob", "!.git/**", "--glob", "!node_modules/**",
+		"--glob", "!build/**", "--glob", "!dist/**", "--glob", "!target/**",
+		"--", query, dir,
+	}
+	cmd := exec.CommandContext(ctx, "rg", args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not start code search."})
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Ripgrep (rg) is required for code search."})
+		return
+	}
+	type rgMessage struct {
+		Type string `json:"type"`
+		Data struct {
+			Path struct {
+				Text string `json:"text"`
+			} `json:"path"`
+			Lines struct {
+				Text string `json:"text"`
+			} `json:"lines"`
+			LineNumber int `json:"line_number"`
+		} `json:"data"`
+	}
+	matches := make([]models.SearchMatch, 0, limit)
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
+	truncated := false
+	for scanner.Scan() {
+		var message rgMessage
+		if json.Unmarshal(scanner.Bytes(), &message) != nil || message.Type != "match" {
+			continue
+		}
+		path := message.Data.Path.Text
+		relativePath, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			relativePath = filepath.Base(path)
+		}
+		matches = append(matches, models.SearchMatch{
+			Path: path, RelativePath: filepath.ToSlash(relativePath),
+			LineNumber: message.Data.LineNumber,
+			LineText:   strings.TrimSpace(message.Data.Lines.Text),
+		})
+		if len(matches) >= limit {
+			truncated = true
+			_ = cmd.Process.Kill()
+			break
 		}
 	}
-
-	if matches == nil {
-		matches = []models.SearchMatch{}
+	scanErr := scanner.Err()
+	cmdErr := cmd.Wait()
+	if scanErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read search results."})
+		return
 	}
-	writeJSON(w, http.StatusOK, matches)
+	if ctx.Err() != nil && !truncated {
+		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "Code search took too long; try a narrower query."})
+		return
+	}
+	if cmdErr != nil && !truncated {
+		if exitErr, ok := cmdErr.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Code search failed."})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"matches": matches, "truncated": truncated})
 }
 
 func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
