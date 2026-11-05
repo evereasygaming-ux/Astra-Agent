@@ -25,8 +25,9 @@ license and attribution for derived/reused bridge code.
   `claude` and `agy_ide_bridge` were not found in Debian PATH at inspection time.
 - External/Debian proot bridge mode is the default in Dart configuration and native
   preferences; Settings can switch to the embedded bridge.
-- Home Chat, Terminal, Editor, and Browser cards are placeholders. No full chat
-  UI, editor, in-app terminal, browser, or Git workspace is present yet.
+- Home Chat and Antigravity Terminal are implemented. Editor is in progress with
+  workspace file browsing and text-file editing/saving; Browser and Git remain
+  future modules.
 - `bridge/` contains the AntiGem-derived Go service. Its Claude manager and
   HTTP handlers match the corresponding v1.0.19 bridge source inspected so far.
 - `.github/workflows/build-debug-apk.yml` builds an arm64 debug APK, generates
@@ -110,7 +111,11 @@ This status is a static source review. No build or tests were run for this plan.
 ### Phase 3 - Coding workspace
 
 - Add workspace/project selection and file access.
-- Implement editor, terminal, and Git in incremental Flutter modules.
+- [x] Add a Flutter workspace file browser and text editor with save and
+  unsaved-change protection. Flutter analysis passes; device validation pending.
+- [x] Add Antigravity terminal screen and bridge streaming; user confirmed it
+  works in the installed APK.
+- Add Git status, diff, and commit workflows.
 - Evaluate browser preview and MCP/plugin support after core workflows work.
 
 ### Phase 4 - Distribution

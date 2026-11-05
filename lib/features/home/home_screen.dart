@@ -182,7 +182,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   icon: Icons.code,
                   title: 'Editor',
                   subtitle: 'Project files',
-                  onTap: () => _comingSoon(context, 'Editor'),
+                  onTap: () => context.push('/editor'),
                 ),
                 _ActionCard(
                   icon: Icons.public,

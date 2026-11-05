@@ -99,6 +99,14 @@
   reopening the app. Chat now auto-restores the newest saved conversation on
   entry, flushes history on Android app lifecycle changes and completed turns,
   and surfaces load/save errors. Device validation of this correction is pending.
+- Antigravity terminal MVP is implemented and committed in `1e4aa82`, with
+  follow-up fixes in `638376d` and `bd51479`. GitHub Actions run `41983414471`
+  passed bridge compilation, Flutter analysis/tests, APK build, Android install
+  safety checks, and artifact upload. User installed the APK and confirmed the
+  terminal works on device.
+- Editor MVP is now in progress: workspace file browsing, text-file editing,
+  save, and unsaved-change confirmation are implemented using existing bridge
+  APIs. Flutter analysis and `git diff --check` pass; device validation pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

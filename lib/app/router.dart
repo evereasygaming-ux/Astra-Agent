@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../features/agy/presentation/agy_screen.dart';
 import '../features/claude/presentation/claude_screen.dart';
 import '../features/claude/presentation/chat_screen.dart';
+import '../features/editor/editor_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/terminal/terminal_screen.dart';
@@ -21,5 +22,6 @@ final GoRouter appRouter = GoRouter(
       path: '/terminal',
       builder: (context, state) => const TerminalScreen(),
     ),
+    GoRoute(path: '/editor', builder: (context, state) => const EditorScreen()),
   ],
 );
