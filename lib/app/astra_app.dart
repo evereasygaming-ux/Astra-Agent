@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -95,133 +96,119 @@ class _BrandLoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screen = MediaQuery.sizeOf(context);
-    final splashSize = screen.width * 0.52 < screen.height * 0.34
-        ? screen.width * 0.52
-        : screen.height * 0.34;
+    const imageWidth = 941.0;
+    const imageHeight = 1672.0;
+    final imageScale = math.max(
+      screen.width / imageWidth,
+      screen.height / imageHeight,
+    );
+    final renderedWidth = imageWidth * imageScale;
+    final renderedHeight = imageHeight * imageScale;
+    final cropLeft = (renderedWidth - screen.width) / 2;
+    final cropTop = (renderedHeight - screen.height) / 2;
+    final progressLeft = 112 * imageScale - cropLeft;
+    final progressTop = 1032 * imageScale - cropTop;
+    final progressWidth = 718 * imageScale;
+    final progressHeight = (70 * imageScale).clamp(38.0, 70.0);
     return Scaffold(
       backgroundColor: AppTheme.background,
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.16),
-            radius: 0.92,
-            colors: [Color(0xFF181329), AppTheme.background],
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/branding/astra_code_splash.png',
+            semanticLabel: 'Astra Code Agent splash screen',
+            fit: BoxFit.cover,
           ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedBuilder(
-                animation: progress,
-                builder: (context, child) => Transform.scale(
-                  scale: 0.88 + (progress.value * 0.12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.accent.withValues(
-                            alpha: 0.12 + progress.value * 0.16,
+          Positioned(
+            left: progressLeft,
+            top: progressTop,
+            width: progressWidth,
+            child: AnimatedBuilder(
+              animation: progress,
+              builder: (context, _) {
+                final percent = (progress.value * 100).round();
+                return Container(
+                  height: progressHeight,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xF2050818),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: AppTheme.cyan.withValues(alpha: 0.95),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.cyan.withValues(alpha: 0.28),
+                        blurRadius: 16,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: progressHeight - 12,
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10152B),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppTheme.accent.withValues(alpha: 0.8),
+                            ),
                           ),
-                          blurRadius: 18 + progress.value * 18,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: Image.asset(
-                      'assets/branding/astra_code_splash.png',
-                      semanticLabel: 'Astra Code Agent logo',
-                      width: splashSize,
-                      height: splashSize,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 22),
-              FadeTransition(
-                opacity: progress,
-                child: const Text(
-                  'Astra Code Agent',
-                  style: TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.2,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              FadeTransition(
-                opacity: progress,
-                child: const Text(
-                  'EXPLORE  •  BUILD  •  CREATE',
-                  style: TextStyle(
-                    color: AppTheme.cyan,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.1,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: splashSize * 1.12,
-                child: AnimatedBuilder(
-                  animation: progress,
-                  builder: (context, _) {
-                    final percent = (progress.value * 100).round();
-                    return Column(
-                      children: [
-                        Row(
-                          children: [
-                            const Text(
-                              'LOADING',
-                              style: TextStyle(
-                                color: AppTheme.muted,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              '$percent%',
-                              style: const TextStyle(
-                                color: AppTheme.cyan,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                fontFeatures: [FontFeature.tabularFigures()],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 9),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: progress.value,
-                            minHeight: 6,
-                            backgroundColor: AppTheme.outline,
-                            valueColor: const AlwaysStoppedAnimation(
-                              AppTheme.cyan,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                const ColoredBox(color: Color(0xFF0A1021)),
+                                FractionallySizedBox(
+                                  alignment: Alignment.centerLeft,
+                                  widthFactor: progress.value,
+                                  child: const DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppTheme.accent,
+                                          AppTheme.accentAlt,
+                                          AppTheme.cyan,
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Preparing your workspace',
-                style: TextStyle(color: AppTheme.muted, fontSize: 11),
-              ),
-            ],
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 45,
+                        child: Text(
+                          '$percent%',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
