@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/app_info.dart';
+import '../agy/presentation/agy_controller.dart';
 import '../bridge/domain/bridge_config.dart';
 import '../bridge/domain/bridge_status.dart';
 import '../bridge/presentation/bridge_controller.dart';
@@ -48,6 +49,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final bridge = ref.watch(bridgeControllerProvider);
+    final agy = ref.watch(agyControllerProvider);
     final config =
         ref.watch(bridgeConfigProvider).value ?? const BridgeConfig();
     final termux = ref.watch(termuxControllerProvider);
@@ -56,6 +58,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       BridgePhase.error => Theme.of(context).colorScheme.error,
       _ => AppTheme.muted,
     };
+    final agyValue = agy.hubOnline
+        ? 'Online'
+        : agy.loading
+        ? 'Checking…'
+        : agy.hub == null
+        ? 'Unavailable'
+        : agy.hub!.status;
+    final agyColor = agy.hubOnline
+        ? AppTheme.accent
+        : agy.hub == null && !agy.loading
+        ? Theme.of(context).colorScheme.error
+        : AppTheme.muted;
 
     return Scaffold(
       body: SafeArea(
@@ -81,12 +95,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: _StatusTile(
                     icon: Icons.smart_toy_outlined,
-                    label: 'Agent',
-                    value: 'Not configured',
-                    color: AppTheme.accentAlt,
+                    label: 'Antigravity',
+                    value: agyValue,
+                    color: agyColor,
+                    onTap: () => context.push('/agy'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -115,6 +130,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 24),
+            const _SectionTitle(title: 'Switch agent'),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.55,
+              children: [
+                _ActionCard(
+                  icon: Icons.terminal,
+                  title: 'Claude Code',
+                  subtitle: 'CLI setup & account',
+                  onTap: () => context.push('/claude'),
+                ),
+                _ActionCard(
+                  icon: Icons.bolt_outlined,
+                  title: 'Antigravity',
+                  subtitle: agyValue,
+                  onTap: () => context.push('/agy'),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
             _SectionTitle(title: 'Workspace'),
             const SizedBox(height: 12),

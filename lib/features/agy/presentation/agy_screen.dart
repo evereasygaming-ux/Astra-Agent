@@ -247,7 +247,7 @@ class _HubPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hub = agy.hub;
     final online = hub?.online == true;
-    final status = hub?.status ?? 'stopped';
+    final status = hub?.status ?? (agy.loading ? 'checking' : 'unavailable');
 
     return _Panel(
       child: Column(
@@ -272,7 +272,11 @@ class _HubPanel extends ConsumerWidget {
               else
                 _Pill(
                   text: online ? 'Online' : status,
-                  color: online ? AppTheme.accent : AppTheme.muted,
+                  color: online
+                      ? AppTheme.accent
+                      : status == 'unavailable'
+                      ? Theme.of(context).colorScheme.error
+                      : AppTheme.muted,
                 ),
             ],
           ),
@@ -280,6 +284,8 @@ class _HubPanel extends ConsumerWidget {
           Text(
             online
                 ? 'Hub is online. Sign-in is managed by Google.'
+                : status == 'unavailable'
+                ? 'Could not read the Hub status from the Debian bridge.'
                 : 'The hub is $status. Start the bridge in Termux, then sign in.',
             style: const TextStyle(
               color: AppTheme.muted,

@@ -67,10 +67,12 @@ class AgyController extends Notifier<AgyState> {
     try {
       final runtime = await _api.runtime();
       AgyHubStatus? hub;
+      String? statusError;
       try {
         hub = await _api.hubStatus();
-      } catch (_) {
+      } catch (error) {
         hub = null;
+        statusError = error.toString();
       }
       AgyLoginUrl? url;
       try {
@@ -83,7 +85,8 @@ class AgyController extends Notifier<AgyState> {
         hub: hub,
         loginUrl: url,
         loading: false,
-        clearError: true,
+        error: statusError,
+        clearError: statusError == null,
       );
     } catch (error) {
       state = state.copyWith(loading: false, error: error.toString());
