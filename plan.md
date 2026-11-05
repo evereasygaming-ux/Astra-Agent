@@ -96,12 +96,12 @@ This status is a static source review. No build or tests were run for this plan.
 
 - [x] Implement workspace selection and Claude Code stream-json chat.
 - [x] Add Antigravity model discovery and prompt streaming through AGY Hub gRPC.
-- Map AntiGem interactions such as streaming, tool approvals, questions,
-  attachments, and session controls before choosing the first supported subset.
-- Validate AGY chat against the user's live Debian Hub; the current work has
-  compile/schema validation but no live device RPC run yet.
-- Add AGY tool approval/questions and persistent conversation history after the
-  basic prompt/response path is confirmed on-device.
+- [x] Map the AntiGem interaction schema and validate AGY's basic prompt/reply
+  path against the user's live Debian Hub (user-confirmed).
+- [x] Add AGY permission/question cards and bridge-side interaction responses;
+  local validation passes, with live approval/question validation pending.
+- Add persistent conversation history after approval/question interaction is
+  confirmed on-device.
 
 ### Phase 3 - Coding workspace
 

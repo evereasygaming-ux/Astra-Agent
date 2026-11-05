@@ -84,12 +84,18 @@ func (h *Hub) Close() {
 }
 
 type clientMessage struct {
-	Type           string `json:"type"` // "ping", "attach_session", "abort"
-	ConversationID string `json:"conversationId"`
-	Model          string `json:"model"`
-	Prompt         string `json:"prompt"`
-	WorkspaceDir   string `json:"workspaceDir"`
-	IsNew          bool   `json:"isNew"`
+	Type            string           `json:"type"` // "ping", "attach_session", "abort"
+	ConversationID  string           `json:"conversationId"`
+	Model           string           `json:"model"`
+	Prompt          string           `json:"prompt"`
+	WorkspaceDir    string           `json:"workspaceDir"`
+	IsNew           bool             `json:"isNew"`
+	TrajectoryID    string           `json:"trajectoryId"`
+	StepIndex       int              `json:"stepIndex"`
+	InteractionType string           `json:"interactionType"`
+	Target          string           `json:"target"`
+	Allow           bool             `json:"allow"`
+	Responses       []map[string]any `json:"responses"`
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
@@ -159,9 +165,26 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 			})
 
 		case "send_prompt":
-			h.serveAgyPrompt(client, msg)
+			go h.serveAgyPrompt(client, msg)
+
+		case "resolve_interaction":
+			h.resolveAgyInteraction(client, msg)
 		}
 	}
+}
+
+func (h *Hub) resolveAgyInteraction(client *ClientConn, msg clientMessage) {
+	if h.AgyClient == nil || msg.ConversationID == "" || msg.StepIndex < 0 {
+		_ = client.SendJSON(map[string]any{"type": "error", "error": "invalid Antigravity interaction"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := h.AgyClient.ResolveInteraction(ctx, msg.ConversationID, msg.TrajectoryID, msg.StepIndex, msg.InteractionType, msg.Target, msg.Allow, msg.Responses); err != nil {
+		_ = client.SendJSON(map[string]any{"type": "error", "error": err.Error()})
+		return
+	}
+	_ = client.SendJSON(map[string]any{"type": "interaction_resolved", "stepIndex": msg.StepIndex})
 }
 
 var errAgyTurnComplete = errors.New("Antigravity turn complete")

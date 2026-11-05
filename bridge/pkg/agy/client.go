@@ -280,7 +280,7 @@ func (c *Client) SendPrompt(ctx context.Context, conversationID, prompt, model s
 			"toolConfig": map[string]any{
 				"runCommand": map[string]any{
 					"autoCommandConfig": map[string]any{
-						"autoExecutionPolicy": "CASCADE_COMMANDS_AUTO_EXECUTION_EAGER",
+						"autoExecutionPolicy": "CASCADE_COMMANDS_AUTO_EXECUTION_OFF",
 					},
 				},
 				"notifyUser": map[string]any{},
@@ -306,6 +306,43 @@ func (c *Client) SendPrompt(ctx context.Context, conversationID, prompt, model s
 		"deliveryStrategy": "MESSAGE_DELIVERY_STRATEGY_WHEN_IDLE",
 	}
 	_, err := c.call(ctx, "SendUserCascadeMessage", "SendUserCascadeMessageRequest", "SendUserCascadeMessageResponse", body)
+	return err
+}
+
+// ResolveInteraction sends a user decision back to the active Antigravity cascade.
+func (c *Client) ResolveInteraction(ctx context.Context, cascadeID, trajectoryID string, stepIndex int, interactionType, target string, allow bool, responses []map[string]any) error {
+	interaction := map[string]any{"trajectoryId": trajectoryID, "stepIndex": stepIndex}
+	switch interactionType {
+	case "askQuestion":
+		interaction["askQuestion"] = map[string]any{
+			"responses": responses,
+			"cancelled": !allow,
+		}
+	case "permission":
+		permission := map[string]any{"allow": allow, "scope": "PERMISSION_SCOPE_ONCE"}
+		if !allow {
+			permission["userDenyInstruction"] = "User declined this action."
+		}
+		interaction["permission"] = permission
+	case "filePermission":
+		interaction["filePermission"] = map[string]any{"allow": allow, "scope": "PERMISSION_SCOPE_ONCE", "absolutePathUri": target}
+	case "runCommand":
+		interaction["runCommand"] = map[string]any{"confirm": allow}
+	case "mcp":
+		interaction["mcp"] = map[string]any{"confirm": allow}
+	case "approvalInteraction":
+		interaction["approvalInteraction"] = map[string]any{"confirm": allow}
+	case "readUrlContent":
+		interaction["readUrlContent"] = map[string]any{"confirm": allow}
+	case "browserAction":
+		interaction["browserAction"] = map[string]any{"confirm": allow}
+	default:
+		return fmt.Errorf("unsupported Antigravity interaction %q", interactionType)
+	}
+	_, err := c.call(ctx, "HandleCascadeUserInteraction", "HandleCascadeUserInteractionRequest", "HandleCascadeUserInteractionResponse", map[string]any{
+		"cascadeId":   cascadeID,
+		"interaction": interaction,
+	})
 	return err
 }
 

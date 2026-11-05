@@ -21,6 +21,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _prompt = TextEditingController();
   final _scroll = ScrollController();
   final List<_ChatMessage> _messages = [];
+  final Map<int, _AgyInteraction> _agyInteractions = {};
   List<_Workspace> _workspaces = [];
   List<_AgentModel> _models = [];
   final Map<int, String> _agyTextByStep = {};
@@ -270,6 +271,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         setState(() => _sending = false);
         return;
       }
+      if (data['type'] == 'interaction_resolved') {
+        final index = (data['stepIndex'] as num?)?.toInt();
+        if (index != null) setState(() => _agyInteractions.remove(index));
+        return;
+      }
       if (data['type'] == 'session_attached' && _agent == 'Antigravity') {
         _agyStarted = true;
         return;
@@ -359,6 +365,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final steps = stepsUpdate['steps'];
     if (steps is! List) return;
     final indices = stepsUpdate['indices'];
+    var interactionAdded = false;
     for (var i = 0; i < steps.length; i++) {
       final step = steps[i];
       if (step is! Map) continue;
@@ -372,6 +379,52 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           : indices is List && i < indices.length && indices[i] is num
           ? (indices[i] as num).toInt()
           : i;
+      final requested = step['requestedInteraction'];
+      if (requested is Map) {
+        final type = requested['askQuestion'] is Map
+            ? 'askQuestion'
+            : requested['runCommand'] is Map
+            ? 'runCommand'
+            : requested['permission'] is Map
+            ? 'permission'
+            : requested['filePermission'] is Map
+            ? 'filePermission'
+            : requested['mcp'] is Map
+            ? 'mcp'
+            : requested['approvalInteraction'] is Map
+            ? 'approvalInteraction'
+            : requested['readUrlContent'] is Map
+            ? 'readUrlContent'
+            : requested['browserAction'] is Map
+            ? 'browserAction'
+            : null;
+        if (type != null && !_agyInteractions.containsKey(index)) {
+          final spec = requested[type];
+          final questions = type == 'askQuestion' && spec is Map
+              ? (spec['questions'] as List? ?? const [])
+                    .whereType<Map>()
+                    .map((q) => Map<String, dynamic>.from(q))
+                    .toList()
+              : const <Map<String, dynamic>>[];
+          final trajectoryId = source is Map
+              ? source['trajectoryId']?.toString() ?? ''
+              : '';
+          final label = type == 'askQuestion'
+              ? 'Antigravity has a question'
+              : _agyActionDescription(spec, type);
+          _agyInteractions[index] = _AgyInteraction(
+            stepIndex: index,
+            trajectoryId: trajectoryId,
+            type: type,
+            label: label,
+            target: spec is Map
+                ? spec['absolutePathUri']?.toString() ?? ''
+                : '',
+            questions: questions,
+          );
+          interactionAdded = true;
+        }
+      }
       final planner = step['plannerResponse'];
       if (planner is Map) {
         final response = planner['response']?.toString() ?? '';
@@ -385,13 +438,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     final response = _agyTextByStep.keys.toList()..sort();
     final text = response.map((index) => _agyTextByStep[index]!).join('\n\n');
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      if (interactionAdded) setState(() {});
+      return;
+    }
     setState(() {
       if (_messages.isNotEmpty && !_messages.last.isUser) {
         _messages[_messages.length - 1] = _messages.last.copyWith(text: text);
       }
     });
     _scrollToBottom();
+  }
+
+  String _agyActionDescription(Object? spec, String type) {
+    if (spec is Map) {
+      final resource = spec['resource'];
+      final action = resource is Map ? resource['action']?.toString() : null;
+      final target = resource is Map ? resource['target']?.toString() : null;
+      final description = spec['actionDescription']?.toString();
+      if (description != null && description.isNotEmpty) return description;
+      final command = spec['proposedCommandLine']?.toString();
+      if (command != null && command.isNotEmpty) return 'Run command: $command';
+      final path = spec['absolutePathUri']?.toString();
+      if (path != null && path.isNotEmpty) return 'Allow file access: $path';
+      if (action != null && action.isNotEmpty) {
+        return target == null || target.isEmpty ? action : '$action: $target';
+      }
+    }
+    return 'Antigravity requests permission to continue ($type).';
+  }
+
+  void _resolveAgyInteraction(
+    _AgyInteraction interaction, {
+    required bool allow,
+    List<Map<String, dynamic>> responses = const [],
+  }) {
+    final socket = _socket;
+    if (socket == null) {
+      setState(() => _error = 'Antigravity connection is not available.');
+      return;
+    }
+    socket.add(
+      jsonEncode({
+        'type': 'resolve_interaction',
+        'conversationId': _sessionId,
+        'trajectoryId': interaction.trajectoryId,
+        'stepIndex': interaction.stepIndex,
+        'interactionType': interaction.type,
+        'target': interaction.target,
+        'allow': allow,
+        'responses': responses,
+      }),
+    );
   }
 
   String _newId() {
@@ -424,6 +522,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _socket = null;
       _sessionId = null;
       _messages.clear();
+      _agyInteractions.clear();
       _agyTextByStep.clear();
       _agyStarted = false;
       _sending = false;
@@ -574,9 +673,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 : ListView.builder(
                     controller: _scroll,
                     padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) =>
-                        _MessageBubble(message: _messages[index]),
+                    itemCount: _messages.length + _agyInteractions.length,
+                    itemBuilder: (context, index) {
+                      if (index < _messages.length) {
+                        return _MessageBubble(message: _messages[index]);
+                      }
+                      final interaction = _agyInteractions.values.elementAt(
+                        index - _messages.length,
+                      );
+                      return _AgyInteractionCard(
+                        key: ValueKey(interaction.stepIndex),
+                        interaction: interaction,
+                        onApprove: (responses) => _resolveAgyInteraction(
+                          interaction,
+                          allow: true,
+                          responses: responses,
+                        ),
+                        onDeny: () =>
+                            _resolveAgyInteraction(interaction, allow: false),
+                      );
+                    },
                   ),
           ),
           SafeArea(
@@ -630,6 +746,171 @@ class _AgentModel {
   final String id;
   final String key;
   final String name;
+}
+
+class _AgyInteraction {
+  const _AgyInteraction({
+    required this.stepIndex,
+    required this.trajectoryId,
+    required this.type,
+    required this.label,
+    required this.target,
+    required this.questions,
+  });
+
+  final int stepIndex;
+  final String trajectoryId;
+  final String type;
+  final String label;
+  final String target;
+  final List<Map<String, dynamic>> questions;
+}
+
+class _AgyInteractionCard extends StatefulWidget {
+  const _AgyInteractionCard({
+    super.key,
+    required this.interaction,
+    required this.onApprove,
+    required this.onDeny,
+  });
+
+  final _AgyInteraction interaction;
+  final ValueChanged<List<Map<String, dynamic>>> onApprove;
+  final VoidCallback onDeny;
+
+  @override
+  State<_AgyInteractionCard> createState() => _AgyInteractionCardState();
+}
+
+class _AgyInteractionCardState extends State<_AgyInteractionCard> {
+  late final List<TextEditingController> _answers;
+  late final List<Set<String>> _selectedOptions;
+
+  @override
+  void initState() {
+    super.initState();
+    _answers = List.generate(
+      widget.interaction.questions.length,
+      (_) => TextEditingController(),
+    );
+    _selectedOptions = List.generate(
+      widget.interaction.questions.length,
+      (_) => <String>{},
+    );
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _answers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isQuestion = widget.interaction.type == 'askQuestion';
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.interaction.label, style: theme.textTheme.titleSmall),
+            if (isQuestion && widget.interaction.questions.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              for (var i = 0; i < widget.interaction.questions.length; i++) ...[
+                Text(
+                  widget.interaction.questions[i]['question']?.toString() ??
+                      'Your answer',
+                ),
+                if (widget.interaction.questions[i]['options'] is List)
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      for (final option
+                          in widget.interaction.questions[i]['options'] as List)
+                        if (option is Map && option['id'] != null)
+                          FilterChip(
+                            label: Text(
+                              option['text']?.toString() ??
+                                  option['id'].toString(),
+                            ),
+                            selected: _selectedOptions[i].contains(
+                              option['id'].toString(),
+                            ),
+                            onSelected: (selected) => setState(() {
+                              final id = option['id'].toString();
+                              if (selected) {
+                                if (widget
+                                        .interaction
+                                        .questions[i]['isMultiSelect'] !=
+                                    true) {
+                                  _selectedOptions[i].clear();
+                                }
+                                _selectedOptions[i].add(id);
+                              } else {
+                                _selectedOptions[i].remove(id);
+                              }
+                            }),
+                          ),
+                    ],
+                  ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _answers[i],
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText: 'Type your answer',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ],
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: widget.onDeny,
+                  child: Text(isQuestion ? 'Skip' : 'Deny'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () {
+                    final responses = <Map<String, dynamic>>[];
+                    for (
+                      var i = 0;
+                      i < widget.interaction.questions.length;
+                      i++
+                    ) {
+                      final question = widget.interaction.questions[i];
+                      responses.add({
+                        'question': question['question']?.toString() ?? '',
+                        'options': question['options'] is List
+                            ? question['options']
+                            : const [],
+                        'isMultiSelect': question['isMultiSelect'] == true,
+                        'selectedOptionIds': _selectedOptions[i].toList(),
+                        'writeInResponse': _answers[i].text.trim(),
+                      });
+                    }
+                    widget.onApprove(responses);
+                  },
+                  child: Text(isQuestion ? 'Send answer' : 'Approve once'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ChatMessage {

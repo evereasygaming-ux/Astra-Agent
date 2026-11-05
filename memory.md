@@ -80,11 +80,13 @@
 - Local `go build ./...`, dynamic protocol-schema compilation, `flutter analyze`,
   and `git diff --check` passed for this change. GitHub Actions run
   `41958450456` passed Go arm64 compilation, Flutter analysis/tests, APK build,
-  Android install-safety checks, and artifact upload. Live RPC validation
-  against the Debian Hub is still pending.
-- AGY chat sends command execution policy `CASCADE_COMMANDS_AUTO_EXECUTION_EAGER`,
-  matching the AntiGem v1.0.19 chat flow. Interactive approval/question UI,
-  attachments, and saved chat history are not part of this first AGY pass.
+  Android install-safety checks, and artifact upload. The user then confirmed
+  live on-device `hi` prompt/reply through Antigravity.
+- Follow-up work now switches command execution to
+  `CASCADE_COMMANDS_AUTO_EXECUTION_OFF` and adds AGY permission/question cards
+  plus `HandleCascadeUserInteraction` support. This follow-up has local build
+  and analyzer validation; on-device interaction validation is still pending.
+- Attachments and saved chat history remain future work.
 
 ## Collaboration preferences
 
