@@ -175,9 +175,11 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     }
     final response = await http
         .post(
-          Uri.https('github.com', '/login/device/code'),
+          Uri.https('github.com', '/login/device/code', {
+            'client_id': _githubOAuthClientId,
+            'scope': 'repo read:user',
+          }),
           headers: const {'Accept': 'application/json'},
-          body: {'client_id': _githubOAuthClientId, 'scope': 'repo read:user'},
         )
         .timeout(const Duration(seconds: 15));
     final decoded = _decodeOAuthResponse(response);
@@ -615,6 +617,7 @@ class _GitHubDeviceDialog extends StatefulWidget {
 
 class _GitHubDeviceDialogState extends State<_GitHubDeviceDialog> {
   String? _error;
+  String _status = 'Waiting for approval…';
   late int _interval;
   late final DateTime _expiresAt;
 
@@ -629,19 +632,19 @@ class _GitHubDeviceDialogState extends State<_GitHubDeviceDialog> {
   }
 
   Future<void> _pollForAccessToken() async {
+    var networkFailures = 0;
     while (mounted && DateTime.now().isBefore(_expiresAt)) {
       await Future<void>.delayed(Duration(seconds: _interval));
       if (!mounted) return;
       try {
         final response = await http
             .post(
-              Uri.https('github.com', '/login/oauth/access_token'),
-              headers: const {'Accept': 'application/json'},
-              body: {
+              Uri.https('github.com', '/login/oauth/access_token', {
                 'client_id': widget.clientId,
                 'device_code': widget.deviceCode.deviceCode,
                 'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
-              },
+              }),
+              headers: const {'Accept': 'application/json'},
             )
             .timeout(const Duration(seconds: 15));
         final decoded = _decodeOAuthResponse(response);
@@ -650,16 +653,22 @@ class _GitHubDeviceDialogState extends State<_GitHubDeviceDialog> {
           if (mounted) Navigator.pop(context, accessToken);
           return;
         }
+        networkFailures = 0;
         switch (decoded['error']) {
           case 'authorization_pending':
+            if (mounted && _status != 'Waiting for approval…') {
+              setState(() => _status = 'Waiting for approval…');
+            }
             continue;
           case 'slow_down':
-            _interval += 5;
+            final newInterval = _intValue(decoded['interval']);
+            _interval = newInterval > _interval ? newInterval : _interval + 5;
             continue;
           case 'access_denied':
             _setError('GitHub sign-in was denied.');
             return;
           case 'expired_token':
+          case 'token_expired':
             _setError('The device code expired. Start sign-in again.');
             return;
           default:
@@ -670,8 +679,17 @@ class _GitHubDeviceDialogState extends State<_GitHubDeviceDialog> {
             return;
         }
       } catch (error) {
-        _setError('Could not reach GitHub: $error');
-        return;
+        networkFailures++;
+        if (networkFailures >= 5) {
+          _setError('Could not reach GitHub after several retries: $error');
+          return;
+        }
+        if (mounted) {
+          setState(
+            () => _status =
+                'Connection interrupted; retrying ($networkFailures/5)…',
+          );
+        }
       }
     }
     _setError('The device code expired. Start sign-in again.');
@@ -704,7 +722,7 @@ class _GitHubDeviceDialogState extends State<_GitHubDeviceDialog> {
           label: const Text('Open GitHub verification'),
         ),
         if (_error == null)
-          const Row(
+          Row(
             children: [
               SizedBox(
                 width: 18,
@@ -712,7 +730,7 @@ class _GitHubDeviceDialogState extends State<_GitHubDeviceDialog> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               SizedBox(width: 10),
-              Expanded(child: Text('Waiting for approval…')),
+              Expanded(child: Text(_status)),
             ],
           )
         else
