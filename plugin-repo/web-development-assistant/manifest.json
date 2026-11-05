@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "id": "web-development-assistant",
+  "name": "Web Development Assistant",
+  "version": "1.0.0",
+  "description": "Build and debug accessible, responsive HTML, CSS, and JavaScript apps."
+}

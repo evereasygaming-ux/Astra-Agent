@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "id": "mcp-builder",
+  "name": "MCP Builder",
+  "version": "1.0.0",
+  "description": "Design, implement, configure, and debug MCP servers and tools."
+}

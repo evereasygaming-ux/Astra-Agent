@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "id": "flutter-android-assistant",
+  "name": "Flutter & Android Assistant",
+  "version": "1.0.0",
+  "description": "Guidance for Flutter apps, Android integration, permissions, and builds."
+}

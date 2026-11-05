@@ -7,6 +7,41 @@
       "name": "Python Assistant",
       "version": "1.0.0",
       "description": "Practical guidance for building, debugging, and maintaining Python projects."
+    },
+    {
+      "path": "flutter-android-assistant",
+      "id": "flutter-android-assistant",
+      "name": "Flutter & Android Assistant",
+      "version": "1.0.0",
+      "description": "Guidance for Flutter apps, Android integration, permissions, and builds."
+    },
+    {
+      "path": "web-development-assistant",
+      "id": "web-development-assistant",
+      "name": "Web Development Assistant",
+      "version": "1.0.0",
+      "description": "Build and debug accessible, responsive HTML, CSS, and JavaScript apps."
+    },
+    {
+      "path": "git-github-assistant",
+      "id": "git-github-assistant",
+      "name": "Git & GitHub Assistant",
+      "version": "1.0.0",
+      "description": "Review changes and work safely with Git branches, commits, and GitHub."
+    },
+    {
+      "path": "mcp-builder",
+      "id": "mcp-builder",
+      "name": "MCP Builder",
+      "version": "1.0.0",
+      "description": "Design, implement, configure, and debug MCP servers and tools."
+    },
+    {
+      "path": "go-bridge-assistant",
+      "id": "go-bridge-assistant",
+      "name": "Go Bridge Assistant",
+      "version": "1.0.0",
+      "description": "Build reliable Go APIs and bridge services with clear errors and safe I/O."
     }
   ]
 }

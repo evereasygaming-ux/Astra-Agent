@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "id": "go-bridge-assistant",
+  "name": "Go Bridge Assistant",
+  "version": "1.0.0",
+  "description": "Build reliable Go APIs and bridge services with clear errors and safe I/O."
+}

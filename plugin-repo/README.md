@@ -29,3 +29,12 @@ files.
 
 - `python-assistant`: Python project setup, implementation, debugging, and
   quality guidance.
+- `flutter-android-assistant`: Flutter and Android app implementation,
+  lifecycle, permissions, and build guidance.
+- `web-development-assistant`: HTML, CSS, JavaScript, responsive UI, and local
+  preview guidance.
+- `git-github-assistant`: Git review, safe branch/commit workflows, and GitHub
+  collaboration guidance.
+- `mcp-builder`: MCP server, tool, resource, prompt, and configuration guidance.
+- `go-bridge-assistant`: Go API and bridge implementation, debugging, and
+  reliability guidance.

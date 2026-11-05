@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "id": "git-github-assistant",
+  "name": "Git & GitHub Assistant",
+  "version": "1.0.0",
+  "description": "Review changes and work safely with Git branches, commits, and GitHub."
+}
