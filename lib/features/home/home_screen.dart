@@ -197,9 +197,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 12),
             _RoadmapCard(
               items: const [
-                'AGY approvals, questions and saved chat history',
                 'Native terminal, editor and Git',
-                'Browser automation and MCP plugins',
+                'Browser preview and MCP plugins',
+                'Project files and code search',
               ],
             ),
             const SizedBox(height: 24),
@@ -530,14 +530,16 @@ class _ActionCard extends StatelessWidget {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Icon(icon, color: AppTheme.accent, size: 22),
+              const Spacer(),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -545,6 +547,8 @@ class _ActionCard extends StatelessWidget {
                   ),
                   Text(
                     subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: AppTheme.muted, fontSize: 11),
                   ),
                 ],

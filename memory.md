@@ -88,7 +88,13 @@
   card appeared and the Python command ran after approval.
 - The current follow-up adds on-device private JSON chat history, recent chat
   selection, and restore of agent/model/workspace context. APK/device validation
-  for this history work is pending.
+  for this history work is pending. The user reported seeing the workspace but
+  not the transcript; saving now waits for history load, reports storage errors,
+  and shows message counts/previews in the history list.
+- Latest chat UX fixes in progress: Antigravity is the default agent, the input
+  hint follows the selected agent, long AGY turns show stage and elapsed time,
+  and Home action cards constrain text to avoid overflow. Flutter analysis passes;
+  device validation is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

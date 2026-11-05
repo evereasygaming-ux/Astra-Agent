@@ -25,16 +25,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final Map<int, _AgyInteraction> _agyInteractions = {};
   final List<_SavedConversation> _history = [];
   final BridgeChannel _historyChannel = BridgeChannel();
+  late Future<void> _historyReady;
   List<_Workspace> _workspaces = [];
   List<_AgentModel> _models = [];
   final Map<int, String> _agyTextByStep = {};
   String? _workspace;
-  String _agent = 'Claude Code';
+  String _agent = 'Antigravity';
   String? _selectedModel;
   String? _sessionId;
   WebSocket? _socket;
   StreamSubscription<dynamic>? _subscription;
   Timer? _historySaveTimer;
+  Timer? _progressTimer;
+  DateTime? _turnStartedAt;
+  String _agentProgress = 'Starting Antigravity…';
+  Duration _turnElapsed = Duration.zero;
   bool _loadingWorkspaces = true;
   bool _sending = false;
   bool _sawStreamText = false;
@@ -46,7 +51,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     unawaited(_loadWorkspaces());
-    unawaited(_loadHistory());
+    _historyReady = _loadHistory();
+    unawaited(_loadModels());
   }
 
   @override
@@ -54,6 +60,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     unawaited(_subscription?.cancel());
     unawaited(_socket?.close());
     _historySaveTimer?.cancel();
+    _progressTimer?.cancel();
     unawaited(_persistCurrentConversation());
     _prompt.dispose();
     _scroll.dispose();
@@ -146,6 +153,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _persistCurrentConversation() async {
+    await _historyReady;
     final id = _sessionId;
     if (id == null || _messages.isEmpty || _workspace == null) return;
     final firstPrompt = _messages.firstWhere(
@@ -177,8 +185,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ..clear()
           ..addAll(next);
       });
-    } catch (_) {
-      // Keep the active chat usable if local storage temporarily fails.
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Chat history could not be saved: $error');
+      }
     }
   }
 
@@ -223,7 +233,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
-                              '${item.agent} · ${item.updatedAt.toLocal()}',
+                              '${item.agent} · ${item.messages.length} messages\n${_historyPreview(item)}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             onTap: () {
                               Navigator.pop(sheetContext);
@@ -238,6 +250,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
       ),
     );
+  }
+
+  String _historyPreview(_SavedConversation item) {
+    final last = item.messages.last.text.trim().replaceAll('\n', ' ');
+    return last.isEmpty ? item.workspace : last;
   }
 
   Future<void> _restoreConversation(_SavedConversation item) async {
@@ -371,6 +388,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _messages.add(_ChatMessage(text: '', isUser: false));
       _prompt.clear();
     });
+    _agentProgress = 'Starting $_agent…';
+    _startProgressTimer();
     _scrollToBottom();
 
     try {
@@ -393,6 +412,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _socket!.add(jsonEncode(message));
       _scheduleHistorySave();
     } catch (error) {
+      _stopProgressTimer();
       if (!mounted) return;
       setState(() {
         _sending = false;
@@ -430,6 +450,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _subscription = socket.listen(
       _onFrame,
       onError: (Object error) {
+        _stopProgressTimer();
         if (mounted) {
           setState(() {
             _sending = false;
@@ -439,6 +460,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _socket = null;
       },
       onDone: () {
+        _stopProgressTimer();
         if (mounted) setState(() => _sending = false);
         _socket = null;
       },
@@ -455,11 +477,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _sending = false;
           _error = data['error']?.toString();
         });
+        _stopProgressTimer();
         _scheduleHistorySave();
         return;
       }
       if (data['type'] == 'done') {
         setState(() => _sending = false);
+        _stopProgressTimer();
         _scheduleHistorySave();
         return;
       }
@@ -479,6 +503,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (data['type'] == 'bridge_state') {
         if (_sending && data['event'] == 'exit') {
           setState(() => _sending = false);
+          _stopProgressTimer();
         }
         return;
       }
@@ -501,12 +526,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             );
           }
         });
+        _stopProgressTimer();
         _scheduleHistorySave();
         _scrollToBottom();
         return;
       }
       if (addition.isEmpty) return;
       setState(() {
+        _agentProgress = 'Receiving response…';
         if (_messages.isNotEmpty && !_messages.last.isUser) {
           if (eventType == 'stream_event') _sawStreamText = true;
           if (eventType == 'assistant' && _sawStreamText) return;
@@ -520,6 +547,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     } catch (_) {
       // Ignore non-JSON frames; the bridge protocol is newline-delimited JSON.
     }
+  }
+
+  void _startProgressTimer() {
+    _progressTimer?.cancel();
+    _turnStartedAt = DateTime.now();
+    _turnElapsed = Duration.zero;
+    _progressTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_sending || _turnStartedAt == null) return;
+      setState(() => _turnElapsed = DateTime.now().difference(_turnStartedAt!));
+    });
+  }
+
+  void _stopProgressTimer() {
+    _progressTimer?.cancel();
+    _progressTimer = null;
+    _turnStartedAt = null;
   }
 
   String _assistantText(Map<String, dynamic> event) {
@@ -560,6 +603,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (steps is! List) return;
     final indices = stepsUpdate['indices'];
     var interactionAdded = false;
+    var progressChanged = false;
     for (var i = 0; i < steps.length; i++) {
       final step = steps[i];
       if (step is! Map) continue;
@@ -592,6 +636,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             : requested['browserAction'] is Map
             ? 'browserAction'
             : null;
+        final nextProgress = type == 'askQuestion'
+            ? 'Waiting for your answer'
+            : type != null
+            ? 'Waiting for your approval'
+            : null;
+        if (nextProgress != null && nextProgress != _agentProgress) {
+          _agentProgress = nextProgress;
+          progressChanged = true;
+        }
         if (type != null && !_agyInteractions.containsKey(index)) {
           final spec = requested[type];
           final questions = type == 'askQuestion' && spec is Map
@@ -618,6 +671,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
           interactionAdded = true;
         }
+      } else {
+        final nextProgress = _agyProgressForStep(step);
+        if (nextProgress != null && nextProgress != _agentProgress) {
+          _agentProgress = nextProgress;
+          progressChanged = true;
+        }
       }
       final planner = step['plannerResponse'];
       if (planner is Map) {
@@ -633,7 +692,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final response = _agyTextByStep.keys.toList()..sort();
     final text = response.map((index) => _agyTextByStep[index]!).join('\n\n');
     if (text.isEmpty) {
-      if (interactionAdded) setState(() {});
+      if (interactionAdded || progressChanged) setState(() {});
       return;
     }
     setState(() {
@@ -643,6 +702,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     _scheduleHistorySave();
     _scrollToBottom();
+  }
+
+  String? _agyProgressForStep(Map step) {
+    final type = step['type']?.toString() ?? '';
+    if (type.contains('PLAN_INPUT')) return 'Planning the work…';
+    if (type.contains('RUN_COMMAND') || type.contains('SHELL_EXEC')) {
+      return 'Running a command…';
+    }
+    if (type.contains('WRITE_TO_FILE') ||
+        type.contains('FILE_CHANGE') ||
+        type.contains('CODE_ACTION')) {
+      return 'Creating project files…';
+    }
+    if (type.contains('COMPILE')) return 'Building the project…';
+    if (type.contains('GREP_SEARCH') ||
+        type.contains('CODE_SEARCH') ||
+        type.contains('SEARCH_WEB') ||
+        type.contains('FIND')) {
+      return 'Searching for information…';
+    }
+    if (type.contains('LIST_DIRECTORY') ||
+        type.contains('VIEW_FILE') ||
+        type.contains('READ_TERMINAL')) {
+      return 'Inspecting the workspace…';
+    }
+    if (type.contains('PLANNER_RESPONSE')) return 'Writing a response…';
+    if (type.contains('USER_INPUT')) return 'Planning the work…';
+    return null;
+  }
+
+  String _elapsedLabel() {
+    final seconds = _turnElapsed.inSeconds;
+    if (seconds < 60) return '${seconds}s';
+    return '${seconds ~/ 60}m ${seconds % 60}s';
   }
 
   String _agyActionDescription(Object? spec, String type) {
@@ -865,37 +958,86 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
           Expanded(
-            child: _messages.isEmpty
-                ? const Center(
-                    child: Text(
-                      'Choose a workspace and send your first prompt.',
-                      style: TextStyle(color: AppTheme.muted),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length + _agyInteractions.length,
-                    itemBuilder: (context, index) {
-                      if (index < _messages.length) {
-                        return _MessageBubble(message: _messages[index]);
-                      }
-                      final interaction = _agyInteractions.values.elementAt(
-                        index - _messages.length,
-                      );
-                      return _AgyInteractionCard(
-                        key: ValueKey(interaction.stepIndex),
-                        interaction: interaction,
-                        onApprove: (responses) => _resolveAgyInteraction(
-                          interaction,
-                          allow: true,
-                          responses: responses,
+            child: Column(
+              children: [
+                Expanded(
+                  child: _messages.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Choose a workspace and send your first prompt.',
+                            style: TextStyle(color: AppTheme.muted),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _scroll,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _messages.length + _agyInteractions.length,
+                          itemBuilder: (context, index) {
+                            if (index < _messages.length) {
+                              return _MessageBubble(
+                                message: _messages[index],
+                                agentName: _agent,
+                              );
+                            }
+                            final interaction = _agyInteractions.values
+                                .elementAt(index - _messages.length);
+                            return _AgyInteractionCard(
+                              key: ValueKey(interaction.stepIndex),
+                              interaction: interaction,
+                              onApprove: (responses) => _resolveAgyInteraction(
+                                interaction,
+                                allow: true,
+                                responses: responses,
+                              ),
+                              onDeny: () => _resolveAgyInteraction(
+                                interaction,
+                                allow: false,
+                              ),
+                            );
+                          },
                         ),
-                        onDeny: () =>
-                            _resolveAgyInteraction(interaction, allow: false),
-                      );
-                    },
+                ),
+                if (_sending)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const LinearProgressIndicator(minHeight: 2),
+                        const SizedBox(height: 7),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.auto_awesome,
+                              size: 16,
+                              color: AppTheme.accent,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _agentProgress,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.muted,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              _elapsedLabel(),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
+              ],
+            ),
           ),
           SafeArea(
             top: false,
@@ -909,8 +1051,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       controller: _prompt,
                       minLines: 1,
                       maxLines: 5,
-                      decoration: const InputDecoration(
-                        hintText: 'Ask Claude to work in this workspace',
+                      decoration: InputDecoration(
+                        hintText: _agent == 'Antigravity'
+                            ? 'Message Antigravity about this workspace'
+                            : 'Ask Claude Code to work in this workspace',
                         border: OutlineInputBorder(),
                       ),
                       onSubmitted: (_) => _send(),
@@ -1181,33 +1325,63 @@ class _SavedConversation {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({required this.message, required this.agentName});
   final _ChatMessage message;
+  final String agentName;
 
   @override
   Widget build(BuildContext context) {
-    final color = message.isUser
-        ? AppTheme.accent.withValues(alpha: 0.15)
-        : Theme.of(context).colorScheme.surfaceContainerHighest;
+    if (!message.isUser && message.text.isEmpty) return const SizedBox.shrink();
+    final isUser = message.isUser;
     return Align(
-      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(14),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.88,
+          maxWidth: MediaQuery.sizeOf(context).width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(14),
+          color: isUser
+              ? AppTheme.accent.withValues(alpha: 0.14)
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(isUser ? 16 : 4),
+            bottomRight: Radius.circular(isUser ? 4 : 16),
+          ),
         ),
-        child: message.text.isEmpty && !message.isUser
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : SelectableText(message.text),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isUser
+                      ? Icons.person_outline
+                      : agentName == 'Antigravity'
+                      ? Icons.auto_awesome
+                      : Icons.code,
+                  size: 15,
+                  color: isUser ? AppTheme.accent : AppTheme.accentAlt,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isUser ? 'You' : agentName,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            SelectableText(message.text),
+          ],
+        ),
       ),
     );
   }
