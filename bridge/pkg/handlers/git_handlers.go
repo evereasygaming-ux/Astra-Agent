@@ -61,11 +61,11 @@ func (h *Handler) GitStatusHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
-// GitHubAuthHandler validates and stores a GitHub personal access token.
+// GitHubAuthHandler validates and stores a GitHub OAuth device-flow token.
 func (h *Handler) GitHubAuthHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		token, err := git.GitHubToken()
+		token, err := git.GitHubAccessToken()
 		if os.IsNotExist(err) {
 			writeJSON(w, http.StatusOK, map[string]interface{}{"connected": false})
 			return
@@ -76,7 +76,7 @@ func (h *Handler) GitHubAuthHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		login, err := git.GitHubLogin()
 		if err != nil {
-			login, _ = git.ValidateGitHubToken(token)
+			login, _ = git.ValidateGitHubAccessToken(token)
 		}
 		if login == "" {
 			writeJSON(w, http.StatusOK, map[string]interface{}{"connected": false, "error": "GitHub account name is unavailable; reconnect your account"})
@@ -85,25 +85,25 @@ func (h *Handler) GitHubAuthHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"connected": true, "login": login})
 	case http.MethodPost:
 		var req struct {
-			Token string `json:"token"`
+			AccessToken string `json:"accessToken"`
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "A GitHub personal access token is required"})
 			return
 		}
-		login, err := git.ValidateGitHubToken(req.Token)
+		login, err := git.ValidateGitHubAccessToken(req.AccessToken)
 		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"error": err.Error()})
 			return
 		}
-		if err := git.SaveGitHubToken(req.Token, login); err != nil {
+		if err := git.SaveGitHubAccessToken(req.AccessToken, login); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "Could not store GitHub token securely"})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"connected": true, "login": login})
 	case http.MethodDelete:
-		if err := git.ClearGitHubToken(); err != nil {
+		if err := git.ClearGitHubAccessToken(); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "Could not remove GitHub token"})
 			return
 		}

@@ -12,6 +12,7 @@ permissions:
 env:
   APP_NAME: astraagent
   FLUTTER_VERSION: "3.47.7"
+  GITHUB_OAUTH_CLIENT_ID: Ov23li8d2IOq9U7yV5Ct
 
 jobs:
   build:
@@ -74,6 +75,7 @@ jobs:
         run: |
           flutter build apk --debug \
             --target-platform android-arm64 \
+            --dart-define=GITHUB_OAUTH_CLIENT_ID=${{ env.GITHUB_OAUTH_CLIENT_ID }} \
             --build-name=${{ steps.version.outputs.name }} \
             --build-number=${{ steps.version.outputs.code }}
           mkdir -p dist

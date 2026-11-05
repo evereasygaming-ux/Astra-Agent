@@ -9,6 +9,8 @@ import '../../app/theme/app_theme.dart';
 import '../bridge/data/bridge_channel.dart';
 import '../bridge/presentation/bridge_controller.dart';
 
+const _githubOAuthClientId = String.fromEnvironment('GITHUB_OAUTH_CLIENT_ID');
+
 class GitScreen extends ConsumerStatefulWidget {
   const GitScreen({super.key});
 
@@ -164,21 +166,51 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     }
   }
 
+  Future<_GitHubDeviceCode> _requestGithubDeviceCode() async {
+    if (_githubOAuthClientId.isEmpty) {
+      throw const _GitException(
+        'GitHub OAuth is not configured. Add GITHUB_OAUTH_CLIENT_ID to the '
+        'build settings after registering an OAuth App with Device Flow enabled.',
+      );
+    }
+    final response = await http
+        .post(
+          Uri.https('github.com', '/login/device/code'),
+          headers: const {'Accept': 'application/json'},
+          body: {'client_id': _githubOAuthClientId, 'scope': 'repo read:user'},
+        )
+        .timeout(const Duration(seconds: 15));
+    final decoded = _decodeOAuthResponse(response);
+    if (response.statusCode != 200 || decoded['device_code'] == null) {
+      throw _GitException(
+        decoded['error_description']?.toString() ??
+            'GitHub could not start sign-in (HTTP ${response.statusCode}).',
+      );
+    }
+    return _GitHubDeviceCode.fromJson(decoded);
+  }
+
   Future<void> _connectGithub() async {
-    final token = await showDialog<String>(
-      context: context,
-      builder: (context) => const _GitHubTokenDialog(),
-    );
-    if (token == null || token.trim().isEmpty || !mounted) return;
     setState(() {
       _busy = true;
       _githubError = null;
     });
     try {
+      final deviceCode = await _requestGithubDeviceCode();
+      if (!mounted) return;
+      final accessToken = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => _GitHubDeviceDialog(
+          clientId: _githubOAuthClientId,
+          deviceCode: deviceCode,
+        ),
+      );
+      if (accessToken == null || !mounted) return;
       final result = await _request(
         'POST',
         '/api/git/github/auth',
-        body: {'token': token.trim()},
+        body: {'accessToken': accessToken},
       );
       if (!mounted) return;
       final account = _GitHubAccount(result['login']?.toString() ?? '');
@@ -347,6 +379,7 @@ class _GitScreenState extends ConsumerState<GitScreen> {
                     loading: _loadingGithub,
                     busy: _busy,
                     error: _githubError,
+                    oauthReady: _githubOAuthClientId.isNotEmpty,
                     onConnect: _connectGithub,
                     onDisconnect: _disconnectGithub,
                   ),
@@ -458,6 +491,7 @@ class _GitHubCard extends StatelessWidget {
     required this.loading,
     required this.busy,
     required this.error,
+    required this.oauthReady,
     required this.onConnect,
     required this.onDisconnect,
   });
@@ -466,6 +500,7 @@ class _GitHubCard extends StatelessWidget {
   final bool loading;
   final bool busy;
   final String? error;
+  final bool oauthReady;
   final VoidCallback onConnect;
   final VoidCallback onDisconnect;
 
@@ -491,7 +526,9 @@ class _GitHubCard extends StatelessWidget {
                       loading
                           ? 'Checking connection…'
                           : account == null
-                          ? 'Connect to use GitHub HTTPS remotes'
+                          ? oauthReady
+                                ? 'Connect to use GitHub HTTPS remotes'
+                                : 'GitHub OAuth Client ID is not configured'
                           : 'Connected',
                       style: const TextStyle(
                         color: AppTheme.muted,
@@ -509,7 +546,7 @@ class _GitHubCard extends StatelessWidget {
                 )
               else if (account == null)
                 OutlinedButton(
-                  onPressed: busy ? null : onConnect,
+                  onPressed: busy || !oauthReady ? null : onConnect,
                   child: const Text('Connect'),
                 )
               else
@@ -539,76 +576,165 @@ class _GitHubCard extends StatelessWidget {
   );
 }
 
-class _GitHubTokenDialog extends StatefulWidget {
-  const _GitHubTokenDialog();
+class _GitHubDeviceCode {
+  const _GitHubDeviceCode({
+    required this.deviceCode,
+    required this.userCode,
+    required this.verificationUri,
+    required this.expiresIn,
+    required this.interval,
+  });
 
-  @override
-  State<_GitHubTokenDialog> createState() => _GitHubTokenDialogState();
+  final String deviceCode;
+  final String userCode;
+  final String verificationUri;
+  final int expiresIn;
+  final int interval;
+
+  factory _GitHubDeviceCode.fromJson(Map<String, dynamic> json) =>
+      _GitHubDeviceCode(
+        deviceCode: json['device_code'].toString(),
+        userCode: json['user_code'].toString(),
+        verificationUri: json['verification_uri'].toString(),
+        expiresIn: _intValue(json['expires_in']),
+        interval: _intValue(json['interval']) == 0
+            ? 5
+            : _intValue(json['interval']),
+      );
 }
 
-class _GitHubTokenDialogState extends State<_GitHubTokenDialog> {
-  final _controller = TextEditingController();
+class _GitHubDeviceDialog extends StatefulWidget {
+  const _GitHubDeviceDialog({required this.clientId, required this.deviceCode});
+
+  final String clientId;
+  final _GitHubDeviceCode deviceCode;
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  State<_GitHubDeviceDialog> createState() => _GitHubDeviceDialogState();
+}
+
+class _GitHubDeviceDialogState extends State<_GitHubDeviceDialog> {
+  String? _error;
+  late int _interval;
+  late final DateTime _expiresAt;
+
+  @override
+  void initState() {
+    super.initState();
+    _interval = widget.deviceCode.interval;
+    _expiresAt = DateTime.now().add(
+      Duration(seconds: widget.deviceCode.expiresIn),
+    );
+    unawaited(_pollForAccessToken());
+  }
+
+  Future<void> _pollForAccessToken() async {
+    while (mounted && DateTime.now().isBefore(_expiresAt)) {
+      await Future<void>.delayed(Duration(seconds: _interval));
+      if (!mounted) return;
+      try {
+        final response = await http
+            .post(
+              Uri.https('github.com', '/login/oauth/access_token'),
+              headers: const {'Accept': 'application/json'},
+              body: {
+                'client_id': widget.clientId,
+                'device_code': widget.deviceCode.deviceCode,
+                'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+              },
+            )
+            .timeout(const Duration(seconds: 15));
+        final decoded = _decodeOAuthResponse(response);
+        final accessToken = decoded['access_token']?.toString();
+        if (response.statusCode == 200 && accessToken?.isNotEmpty == true) {
+          if (mounted) Navigator.pop(context, accessToken);
+          return;
+        }
+        switch (decoded['error']) {
+          case 'authorization_pending':
+            continue;
+          case 'slow_down':
+            _interval += 5;
+            continue;
+          case 'access_denied':
+            _setError('GitHub sign-in was denied.');
+            return;
+          case 'expired_token':
+            _setError('The device code expired. Start sign-in again.');
+            return;
+          default:
+            _setError(
+              decoded['error_description']?.toString() ??
+                  'GitHub sign-in failed (HTTP ${response.statusCode}).',
+            );
+            return;
+        }
+      } catch (error) {
+        _setError('Could not reach GitHub: $error');
+        return;
+      }
+    }
+    _setError('The device code expired. Start sign-in again.');
+  }
+
+  void _setError(String message) {
+    if (mounted) setState(() => _error = message);
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Connect GitHub'),
-    content: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Create a fine-grained personal access token for the repositories '
-            'you need. Grant Contents: Read and write, then paste it below. '
-            'Use an HTTPS GitHub remote; SSH remotes do not use this token.',
+    title: const Text('Sign in to GitHub'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Open GitHub and enter this one-time code:'),
+        const SizedBox(height: 12),
+        Center(
+          child: SelectableText(
+            widget.deviceCode.userCode,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
           ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => BridgeChannel().openUrl(
-                'https://github.com/settings/personal-access-tokens/new',
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: () =>
+              BridgeChannel().openUrl(widget.deviceCode.verificationUri),
+          icon: const Icon(Icons.open_in_new, size: 16),
+          label: const Text('Open GitHub verification'),
+        ),
+        if (_error == null)
+          const Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              icon: const Icon(Icons.open_in_new, size: 16),
-              label: const Text('Create token on GitHub'),
-            ),
+              SizedBox(width: 10),
+              Expanded(child: Text('Waiting for approval…')),
+            ],
+          )
+        else
+          Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            obscureText: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            decoration: const InputDecoration(
-              labelText: 'Personal access token',
-              hintText: 'github_pat_…',
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'The token is saved in Debian proot with owner-only file '
-            'permissions. It is not added to the remote URL.',
-            style: TextStyle(fontSize: 12, color: AppTheme.muted),
-          ),
-        ],
-      ),
+      ],
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
         child: const Text('Cancel'),
       ),
-      FilledButton(
-        onPressed: () => Navigator.pop(context, _controller.text),
-        child: const Text('Connect'),
-      ),
     ],
   );
+}
+
+Map<String, dynamic> _decodeOAuthResponse(http.Response response) {
+  final decoded = jsonDecode(response.body);
+  if (decoded is! Map) throw const _GitException('Invalid GitHub response.');
+  return decoded.cast<String, dynamic>();
 }
 
 class _BranchCard extends StatelessWidget {

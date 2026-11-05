@@ -116,8 +116,8 @@ This status is a static source review. No build or tests were run for this plan.
 - [x] Add Antigravity terminal screen and bridge streaming; user confirmed it
   works in the installed APK.
 - [x] Add Git workspace status, file diffs, stage/unstage, stage all, repository
-  initialization, commits, and GitHub token connection. Flutter analysis and Go
-  compilation pass; device validation pending.
+  initialization, commits, and GitHub OAuth device sign-in. Flutter analysis and
+  Go compilation pass; OAuth Device Flow and device validation pending.
 - Evaluate browser preview and MCP/plugin support after core workflows work.
 
 ### Phase 4 - Distribution

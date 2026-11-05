@@ -112,10 +112,11 @@
   status, staged/unstaged/untracked file lists, per-file diff, stage/unstage,
   stage all, repository initialization, and commit of staged changes. Flutter
   analysis and `git diff --check` pass; device validation is pending.
-- GitHub connect/disconnect is now added using a fine-grained personal access
-  token. The bridge validates it against GitHub, stores it outside repositories
-  with owner-only file permissions, and supplies it through askpass for HTTPS
-  github.com remotes. Flutter analysis and Go compilation pass; device validation
+- GitHub sign-in uses the OAuth device flow. Its Client ID comes from the
+  `GITHUB_OAUTH_CLIENT_ID` Dart define and is configured in the GitHub Actions
+  workflow. The OAuth App must have Device Flow enabled. The bridge validates the
+  access token, stores it outside repositories with owner-only file permissions,
+  and supplies it through askpass for HTTPS github.com remotes. Device validation
   is pending.
 - Attachments remain future work.
 

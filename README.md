@@ -57,8 +57,15 @@ Local build:
 
 ```bash
 flutter pub get
-flutter build apk --debug
+flutter build apk --debug \
+  --dart-define=GITHUB_OAUTH_CLIENT_ID=YOUR_OAUTH_APP_CLIENT_ID
 ```
+
+For GitHub sign-in, the configured GitHub OAuth App must have Device Flow enabled.
+The app uses GitHub's device authorization flow and requests `repo read:user` so
+GitHub HTTPS remotes can authenticate. The public Client ID is passed to the APK
+build; no OAuth client secret is used. The bridge stores the resulting access
+token in Debian outside project folders with owner-only permissions.
 
 The bridge binary is generated into
 `android/app/src/main/assets/bin/agy_ide_bridge` by CI or by:

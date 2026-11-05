@@ -79,8 +79,8 @@ func githubTokenPath() (string, error) {
 	return filepath.Join(home, ".config", "astraagent", "github-token"), nil
 }
 
-// ValidateGitHubToken checks the token with GitHub and returns the account login.
-func ValidateGitHubToken(token string) (string, error) {
+// ValidateGitHubAccessToken checks the OAuth access token and returns the account login.
+func ValidateGitHubAccessToken(token string) (string, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", fmt.Errorf("personal access token is required")
@@ -109,8 +109,8 @@ func ValidateGitHubToken(token string) (string, error) {
 	return user.Login, nil
 }
 
-// SaveGitHubToken stores the token and verified account name outside repositories.
-func SaveGitHubToken(token, login string) error {
+// SaveGitHubAccessToken stores the OAuth token and verified account name outside repositories.
+func SaveGitHubAccessToken(token, login string) error {
 	path, err := githubTokenPath()
 	if err != nil {
 		return err
@@ -135,8 +135,8 @@ func SaveGitHubToken(token, login string) error {
 	return os.Chmod(loginPath, 0600)
 }
 
-// GitHubToken returns the stored credential without exposing it to API callers.
-func GitHubToken() (string, error) {
+// GitHubAccessToken returns the stored credential without exposing it to API callers.
+func GitHubAccessToken() (string, error) {
 	path, err := githubTokenPath()
 	if err != nil {
 		return "", err
@@ -161,8 +161,8 @@ func GitHubLogin() (string, error) {
 	return strings.TrimSpace(string(login)), nil
 }
 
-// ClearGitHubToken removes the locally stored GitHub credential.
-func ClearGitHubToken() error {
+// ClearGitHubAccessToken removes the locally stored GitHub credential.
+func ClearGitHubAccessToken() error {
 	path, err := githubTokenPath()
 	if err != nil {
 		return err
