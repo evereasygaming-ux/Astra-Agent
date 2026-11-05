@@ -63,6 +63,14 @@ class BridgeChannel {
     return result?.cast<String, Object?>() ?? const {};
   }
 
+  Future<String> chatHistory() async {
+    return await _channel.invokeMethod<String>('getChatHistory') ?? '[]';
+  }
+
+  Future<void> saveChatHistory(String json) async {
+    await _channel.invokeMethod<void>('saveChatHistory', {'json': json});
+  }
+
   Future<Map<String, Object?>> termuxStatus() async {
     final result = await _channel.invokeMethod<Map<Object?, Object?>>(
       'termuxStatus',
@@ -98,12 +106,16 @@ class BridgeChannel {
   }
 
   Future<Map<String, Object?>> agyStatus() async {
-    final result = await _channel.invokeMethod<Map<Object?, Object?>>('agyStatus');
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'agyStatus',
+    );
     return result?.cast<String, Object?>() ?? const {};
   }
 
   Future<Map<String, Object?>> agyInstall() async {
-    final result = await _channel.invokeMethod<Map<Object?, Object?>>('agyInstall');
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'agyInstall',
+    );
     return result?.cast<String, Object?>() ?? const {};
   }
 }

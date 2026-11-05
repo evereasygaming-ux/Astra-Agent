@@ -99,9 +99,9 @@ This status is a static source review. No build or tests were run for this plan.
 - [x] Map the AntiGem interaction schema and validate AGY's basic prompt/reply
   path against the user's live Debian Hub (user-confirmed).
 - [x] Add AGY permission/question cards and bridge-side interaction responses;
-  local validation passes, with live approval/question validation pending.
-- Add persistent conversation history after approval/question interaction is
-  confirmed on-device.
+  the user confirmed approving a command card and seeing command output.
+- Add private on-device chat history with recent-conversation restore; local
+  validation passes, with APK and device validation pending.
 
 ### Phase 3 - Coding workspace
 

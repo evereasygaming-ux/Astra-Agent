@@ -84,9 +84,12 @@
   live on-device `hi` prompt/reply through Antigravity.
 - Follow-up work now switches command execution to
   `CASCADE_COMMANDS_AUTO_EXECUTION_OFF` and adds AGY permission/question cards
-  plus `HandleCascadeUserInteraction` support. This follow-up has local build
-  and analyzer validation; on-device interaction validation is still pending.
-- Attachments and saved chat history remain future work.
+  plus `HandleCascadeUserInteraction` support. The user confirmed the approve
+  card appeared and the Python command ran after approval.
+- The current follow-up adds on-device private JSON chat history, recent chat
+  selection, and restore of agent/model/workspace context. APK/device validation
+  for this history work is pending.
+- Attachments remain future work.
 
 ## Collaboration preferences
 

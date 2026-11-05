@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../app/theme/app_theme.dart';
+import '../../bridge/data/bridge_channel.dart';
 import '../../bridge/presentation/bridge_controller.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -22,6 +23,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scroll = ScrollController();
   final List<_ChatMessage> _messages = [];
   final Map<int, _AgyInteraction> _agyInteractions = {};
+  final List<_SavedConversation> _history = [];
+  final BridgeChannel _historyChannel = BridgeChannel();
   List<_Workspace> _workspaces = [];
   List<_AgentModel> _models = [];
   final Map<int, String> _agyTextByStep = {};
@@ -31,6 +34,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String? _sessionId;
   WebSocket? _socket;
   StreamSubscription<dynamic>? _subscription;
+  Timer? _historySaveTimer;
   bool _loadingWorkspaces = true;
   bool _sending = false;
   bool _sawStreamText = false;
@@ -42,12 +46,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     unawaited(_loadWorkspaces());
+    unawaited(_loadHistory());
   }
 
   @override
   void dispose() {
     unawaited(_subscription?.cancel());
     unawaited(_socket?.close());
+    _historySaveTimer?.cancel();
+    unawaited(_persistCurrentConversation());
     _prompt.dispose();
     _scroll.dispose();
     super.dispose();
@@ -80,8 +87,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           .toList();
       if (!mounted) return;
       setState(() {
+        final currentWorkspace = _workspace;
         _workspaces = found;
-        _workspace = found.isEmpty ? null : found.first.path;
+        if (currentWorkspace != null &&
+            !found.any((item) => item.path == currentWorkspace)) {
+          _workspaces.add(
+            _Workspace(
+              name: currentWorkspace.split('/').last,
+              path: currentWorkspace,
+            ),
+          );
+        }
+        _workspace =
+            currentWorkspace ?? (found.isEmpty ? null : found.first.path);
         _loadingWorkspaces = false;
       });
     } catch (error) {
@@ -91,6 +109,176 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _error = 'Workspace list could not load: $error';
       });
     }
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final decoded = jsonDecode(await _historyChannel.chatHistory());
+      if (decoded is! List) return;
+      final history =
+          decoded
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    _SavedConversation.fromMap(Map<String, dynamic>.from(item)),
+              )
+              .where((item) => item.id.isNotEmpty && item.messages.isNotEmpty)
+              .toList()
+            ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      if (!mounted) return;
+      setState(() {
+        _history
+          ..clear()
+          ..addAll(history);
+      });
+    } catch (_) {
+      // A missing or unreadable history file should not prevent chat use.
+    }
+  }
+
+  void _scheduleHistorySave() {
+    if (_sessionId == null || _messages.isEmpty || _workspace == null) return;
+    _historySaveTimer?.cancel();
+    _historySaveTimer = Timer(
+      const Duration(milliseconds: 500),
+      () => unawaited(_persistCurrentConversation()),
+    );
+  }
+
+  Future<void> _persistCurrentConversation() async {
+    final id = _sessionId;
+    if (id == null || _messages.isEmpty || _workspace == null) return;
+    final firstPrompt = _messages.firstWhere(
+      (message) => message.isUser,
+      orElse: () => const _ChatMessage(text: 'New chat', isUser: true),
+    );
+    final rawTitle = firstPrompt.text.trim().replaceAll('\n', ' ');
+    final item = _SavedConversation(
+      id: id,
+      title: String.fromCharCodes(rawTitle.runes.take(72)),
+      agent: _agent,
+      model: _selectedModel,
+      workspace: _workspace!,
+      updatedAt: DateTime.now(),
+      messages: List<_ChatMessage>.unmodifiable(_messages),
+    );
+    final next = <_SavedConversation>[
+      item,
+      ..._history.where((saved) => saved.id != id),
+    ];
+    if (next.length > 50) next.removeRange(50, next.length);
+    try {
+      await _historyChannel.saveChatHistory(
+        jsonEncode(next.map((conversation) => conversation.toMap()).toList()),
+      );
+      if (!mounted) return;
+      setState(() {
+        _history
+          ..clear()
+          ..addAll(next);
+      });
+    } catch (_) {
+      // Keep the active chat usable if local storage temporarily fails.
+    }
+  }
+
+  Future<void> _showHistory() async {
+    await _persistCurrentConversation();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.65,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Chat history',
+                      style: Theme.of(sheetContext).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('Saved on this device'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _history.isEmpty
+                    ? const Center(child: Text('No saved conversations yet.'))
+                    : ListView.builder(
+                        itemCount: _history.length,
+                        itemBuilder: (context, index) {
+                          final item = _history[index];
+                          return ListTile(
+                            leading: const Icon(Icons.chat_bubble_outline),
+                            title: Text(
+                              item.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              '${item.agent} · ${item.updatedAt.toLocal()}',
+                            ),
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              unawaited(_restoreConversation(item));
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _restoreConversation(_SavedConversation item) async {
+    _historySaveTimer?.cancel();
+    await _subscription?.cancel();
+    await _socket?.close();
+    if (!mounted) return;
+    setState(() {
+      _subscription = null;
+      _socket = null;
+      _sessionId = item.id;
+      _agent = item.agent;
+      _workspace = item.workspace;
+      if (!_workspaces.any((workspace) => workspace.path == item.workspace)) {
+        _workspaces = [
+          ..._workspaces,
+          _Workspace(
+            name: item.workspace.split('/').last,
+            path: item.workspace,
+          ),
+        ];
+      }
+      _models = [];
+      _selectedModel = null;
+      _messages
+        ..clear()
+        ..addAll(item.messages);
+      _agyInteractions.clear();
+      _agyTextByStep.clear();
+      _agyStarted = item.agent == 'Antigravity';
+      _sending = false;
+      _error = null;
+    });
+    if (item.agent == 'Antigravity') {
+      await _loadModels();
+      if (!mounted) return;
+      if (_models.any((model) => model.id == item.model)) {
+        setState(() => _selectedModel = item.model);
+      }
+    }
+    _scrollToBottom();
   }
 
   void _selectAgent(String? value) {
@@ -203,6 +391,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               'isNew': !_agyStarted,
             };
       _socket!.add(jsonEncode(message));
+      _scheduleHistorySave();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -214,6 +403,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _messages.removeLast();
         }
       });
+      _scheduleHistorySave();
     }
   }
 
@@ -265,10 +455,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _sending = false;
           _error = data['error']?.toString();
         });
+        _scheduleHistorySave();
         return;
       }
       if (data['type'] == 'done') {
         setState(() => _sending = false);
+        _scheduleHistorySave();
         return;
       }
       if (data['type'] == 'interaction_resolved') {
@@ -309,6 +501,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             );
           }
         });
+        _scheduleHistorySave();
         _scrollToBottom();
         return;
       }
@@ -322,6 +515,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
         }
       });
+      _scheduleHistorySave();
       _scrollToBottom();
     } catch (_) {
       // Ignore non-JSON frames; the bridge protocol is newline-delimited JSON.
@@ -447,6 +641,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _messages[_messages.length - 1] = _messages.last.copyWith(text: text);
       }
     });
+    _scheduleHistorySave();
     _scrollToBottom();
   }
 
@@ -514,6 +709,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _newChat() async {
+    _historySaveTimer?.cancel();
+    await _persistCurrentConversation();
     await _subscription?.cancel();
     await _socket?.close();
     if (!mounted) return;
@@ -537,6 +734,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       appBar: AppBar(
         title: const Text('Agent chat'),
         actions: [
+          IconButton(
+            tooltip: 'Chat history',
+            onPressed: _sending ? null : _showHistory,
+            icon: const Icon(Icons.history),
+          ),
           IconButton(
             tooltip: 'New chat',
             onPressed: _sessionId == null || _sending ? null : _newChat,
@@ -919,6 +1121,63 @@ class _ChatMessage {
   final bool isUser;
   _ChatMessage copyWith({String? text}) =>
       _ChatMessage(text: text ?? this.text, isUser: isUser);
+}
+
+class _SavedConversation {
+  const _SavedConversation({
+    required this.id,
+    required this.title,
+    required this.agent,
+    required this.model,
+    required this.workspace,
+    required this.updatedAt,
+    required this.messages,
+  });
+
+  final String id;
+  final String title;
+  final String agent;
+  final String? model;
+  final String workspace;
+  final DateTime updatedAt;
+  final List<_ChatMessage> messages;
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'agent': agent,
+    'model': model,
+    'workspace': workspace,
+    'updatedAt': updatedAt.toIso8601String(),
+    'messages': messages
+        .map((message) => {'text': message.text, 'isUser': message.isUser})
+        .toList(),
+  };
+
+  factory _SavedConversation.fromMap(Map<String, dynamic> map) {
+    final rawMessages = map['messages'];
+    final messages = rawMessages is List
+        ? rawMessages
+              .whereType<Map>()
+              .map(
+                (message) => _ChatMessage(
+                  text: message['text']?.toString() ?? '',
+                  isUser: message['isUser'] == true,
+                ),
+              )
+              .toList()
+        : <_ChatMessage>[];
+    final rawUpdatedAt = DateTime.tryParse(map['updatedAt']?.toString() ?? '');
+    return _SavedConversation(
+      id: map['id']?.toString() ?? '',
+      title: map['title']?.toString() ?? 'Saved chat',
+      agent: map['agent']?.toString() ?? 'Claude Code',
+      model: map['model']?.toString(),
+      workspace: map['workspace']?.toString() ?? '',
+      updatedAt: rawUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      messages: messages,
+    );
+  }
 }
 
 class _MessageBubble extends StatelessWidget {

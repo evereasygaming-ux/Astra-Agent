@@ -2,6 +2,7 @@ package com.astra.agent
 
 import android.content.Intent
 import android.net.Uri
+import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -70,6 +71,31 @@ class MainActivity : FlutterActivity() {
 
                     "getBridgeConfig" -> {
                         result.success(readBridgeConfig())
+                    }
+
+                    "getChatHistory" -> {
+                        val historyFile = File(filesDir, CHAT_HISTORY_FILE)
+                        result.success(if (historyFile.exists()) historyFile.readText() else "[]")
+                    }
+
+                    "saveChatHistory" -> {
+                        val json = call.argument<String>("json")
+                        if (json == null) {
+                            result.error("bad_history", "json is required", null)
+                        } else {
+                            try {
+                                val historyFile = File(filesDir, CHAT_HISTORY_FILE)
+                                val tempFile = File(filesDir, "$CHAT_HISTORY_FILE.tmp")
+                                tempFile.writeText(json)
+                                if (!tempFile.renameTo(historyFile)) {
+                                    tempFile.copyTo(historyFile, overwrite = true)
+                                    tempFile.delete()
+                                }
+                                result.success(true)
+                            } catch (error: Exception) {
+                                result.error("save_history_failed", error.message, null)
+                            }
+                        }
                     }
 
                     "setBridgeConfig" -> {
@@ -199,5 +225,6 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "com.astra.agent/bridge"
         private const val PREFS = "astra_bridge"
+        private const val CHAT_HISTORY_FILE = "chat_history.json"
     }
 }
