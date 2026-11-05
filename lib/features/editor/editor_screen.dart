@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../../app/theme/app_theme.dart';
 import '../bridge/data/bridge_service.dart';
 import '../bridge/presentation/bridge_controller.dart';
+import '../terminal/terminal_screen.dart';
 import 'workspace_folder_picker.dart';
 
 class EditorScreen extends ConsumerStatefulWidget {
@@ -309,6 +310,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       MaterialPageRoute(
         builder: (_) => _TextFileEditor(
           bridge: bridge,
+          workspacePath: _projectPath ?? _currentPath ?? '',
           path: entry.path,
           name: entry.name,
           fileSize: entry.size,
@@ -611,12 +613,14 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
 class _TextFileEditor extends StatefulWidget {
   const _TextFileEditor({
     required this.bridge,
+    required this.workspacePath,
     required this.path,
     required this.name,
     required this.fileSize,
   });
 
   final BridgeService bridge;
+  final String workspacePath;
   final String path;
   final String name;
   final int fileSize;
@@ -759,6 +763,31 @@ class _TextFileEditorState extends State<_TextFileEditor> {
     }
   }
 
+  void _openInNeovim() {
+    if (_dirty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Save this file before opening it in Neovim.'),
+        ),
+      );
+      return;
+    }
+    final quotedPath = _shellQuote(widget.path);
+    final command =
+        'if command -v nvim >/dev/null 2>&1; then exec nvim -- $quotedPath; '
+        'else printf "\\r\\nNeovim is not installed. Install it with: apt-get update && apt-get install -y neovim\\r\\n"; fi';
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => TerminalScreen(
+          initialWorkspace: widget.workspacePath,
+          initialCommand: command,
+        ),
+      ),
+    );
+  }
+
+  String _shellQuote(String value) => "'${value.replaceAll("'", "'\\''")}'";
+
   String _responseError(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);
@@ -797,6 +826,11 @@ class _TextFileEditorState extends State<_TextFileEditor> {
             ],
           ),
           actions: [
+            IconButton(
+              tooltip: 'Open in Neovim terminal',
+              onPressed: _loading || _saving ? null : _openInNeovim,
+              icon: const Icon(Icons.terminal),
+            ),
             IconButton(
               tooltip: 'Save file',
               onPressed: !_dirty || _saving || _loading ? null : _save,

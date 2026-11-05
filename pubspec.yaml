@@ -38,6 +38,7 @@ dependencies:
   go_router: ^18.1.2
   http: ^1.6.0
   webview_flutter: ^4.14.1
+  xterm: ^4.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

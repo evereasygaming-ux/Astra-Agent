@@ -45,6 +45,17 @@ proot-distro login debian
 ~/.astra/start-bridge.sh --restart
 ```
 
+## Editor and terminal
+
+The Terminal screen uses an interactive PTY with ANSI/xterm rendering, resize,
+keyboard input, and Escape/Ctrl shortcuts. From a file in Editor, tap the
+terminal icon to open that file in Neovim in the same workspace. Neovim must be
+installed inside Debian first:
+
+```bash
+apt-get update && apt-get install -y neovim
+```
+
 ## Build
 
 Debug APKs are built by GitHub Actions (`.github/workflows/build-debug-apk.yml`):

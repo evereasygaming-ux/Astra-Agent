@@ -169,13 +169,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 _ActionCard(
                   icon: Icons.terminal,
                   title: 'Terminal',
-                  subtitle: 'Antigravity terminal',
+                  subtitle: 'Interactive PTY · ANSI colors',
                   onTap: () => context.push('/terminal'),
                 ),
                 _ActionCard(
                   icon: Icons.code,
                   title: 'Editor',
-                  subtitle: 'Project files',
+                  subtitle: 'Project files · Neovim',
                   onTap: () => context.push('/editor'),
                 ),
                 _ActionCard(

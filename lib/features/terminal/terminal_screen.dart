@@ -2,25 +2,30 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:xterm/xterm.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../bridge/presentation/bridge_controller.dart';
 
 class TerminalScreen extends ConsumerStatefulWidget {
-  const TerminalScreen({super.key});
+  const TerminalScreen({super.key, this.initialWorkspace, this.initialCommand});
+
+  final String? initialWorkspace;
+  final String? initialCommand;
 
   @override
   ConsumerState<TerminalScreen> createState() => _TerminalScreenState();
 }
 
 class _TerminalScreenState extends ConsumerState<TerminalScreen> {
-  final _command = TextEditingController();
-  final _scroll = ScrollController();
-  final _output = StringBuffer();
+  final _terminal = Terminal(maxLines: 10000);
+  final _terminalController = TerminalController();
   List<_Workspace> _workspaces = [];
   String? _workspace;
   WebSocket? _socket;
@@ -30,18 +35,31 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   bool _loading = true;
   bool _connected = false;
   bool _connecting = false;
+  bool _controlModifier = false;
+  bool _startupPending = false;
+  int _terminalColumns = 80;
+  int _terminalRows = 24;
+  Timer? _resizeTimer;
 
   @override
   void initState() {
     super.initState();
+    _startupPending = widget.initialCommand != null;
+    _terminal.onOutput = _sendInput;
+    _terminal.onResize = (columns, rows, _, _) {
+      _terminalColumns = columns;
+      _terminalRows = rows;
+      _resizeTimer?.cancel();
+      _resizeTimer = Timer(const Duration(milliseconds: 100), _sendResize);
+    };
     unawaited(_loadWorkspaces());
   }
 
   @override
   void dispose() {
+    _resizeTimer?.cancel();
     unawaited(_closeTerminal());
-    _command.dispose();
-    _scroll.dispose();
+    _terminalController.dispose();
     super.dispose();
   }
 
@@ -67,9 +85,13 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       final items = raw.whereType<Map>().map(_Workspace.fromJson).toList();
       if (items.isEmpty) throw const FormatException('No workspaces found');
       if (!mounted) return;
+      final preferred = widget.initialWorkspace;
+      final selectedWorkspace = items.any((item) => item.path == preferred)
+          ? preferred
+          : items.first.path;
       setState(() {
         _workspaces = items;
-        _workspace = items.first.path;
+        _workspace = selectedWorkspace;
         _loading = false;
       });
       await _connect();
@@ -149,20 +171,18 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               _error = null;
             });
           }
+          _sendResize();
+          final startupCommand = widget.initialCommand;
+          if (_startupPending && startupCommand != null) {
+            _startupPending = false;
+            _sendInput('$startupCommand\r');
+          }
           break;
         case 'terminal_output':
           final data = message['data'];
           if (data is Map && data['output'] is String) {
             final bytes = base64Decode(data['output'] as String);
-            _output.write(utf8.decode(bytes, allowMalformed: true));
-            if (mounted) {
-              setState(() {});
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (_scroll.hasClients) {
-                  _scroll.jumpTo(_scroll.position.maxScrollExtent);
-                }
-              });
-            }
+            _terminal.write(utf8.decode(bytes, allowMalformed: true));
             final code = data['exitCode'];
             if (code is num && code != 0 && mounted) {
               setState(() => _status = 'Process exited ($code)');
@@ -190,11 +210,26 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     }
   }
 
-  void _sendCommand(String value) {
-    final command = value.trimRight();
-    if (!_connected || command.isEmpty) return;
-    _socket?.add(jsonEncode({'type': 'terminal_input', 'input': '$command\n'}));
-    _command.clear();
+  void _sendInput(String input) {
+    if (!_connected || input.isEmpty) return;
+    _socket?.add(jsonEncode({'type': 'terminal_input', 'input': input}));
+  }
+
+  void _sendResize() {
+    if (!_connected || _terminalColumns < 1 || _terminalRows < 1) return;
+    _socket?.add(
+      jsonEncode({
+        'type': 'terminal_resize',
+        'cols': _terminalColumns,
+        'rows': _terminalRows,
+      }),
+    );
+  }
+
+  void _sendKey(TerminalKey key, {bool ctrl = false}) {
+    if (!_connected) return;
+    _terminal.keyInput(key, ctrl: ctrl || _controlModifier);
+    if (_controlModifier) setState(() => _controlModifier = false);
   }
 
   Future<void> _closeTerminal() async {
@@ -283,56 +318,75 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                 ),
               ],
               const SizedBox(height: 12),
+              SizedBox(
+                height: 38,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _terminalKeyButton('Esc', TerminalKey.escape),
+                      _terminalKeyButton('Tab', TerminalKey.tab),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: OutlinedButton(
+                          onPressed: _connected
+                              ? () => setState(
+                                  () => _controlModifier = !_controlModifier,
+                                )
+                              : null,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(48, 34),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            backgroundColor: _controlModifier
+                                ? AppTheme.accent.withValues(alpha: 0.2)
+                                : null,
+                          ),
+                          child: const Text('Ctrl'),
+                        ),
+                      ),
+                      _terminalKeyButton('↑', TerminalKey.arrowUp),
+                      _terminalKeyButton('↓', TerminalKey.arrowDown),
+                      _terminalKeyButton('←', TerminalKey.arrowLeft),
+                      _terminalKeyButton('→', TerminalKey.arrowRight),
+                      _terminalKeyButton('Enter', TerminalKey.enter),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               Expanded(
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: const Color(0xff101318),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: SingleChildScrollView(
-                    controller: _scroll,
-                    child: SelectableText(
-                      _output.isEmpty
-                          ? 'Terminal output will appear here.'
-                          : _output.toString(),
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        color: Color(0xffd7e1ec),
-                        height: 1.35,
-                      ),
+                  clipBehavior: Clip.antiAlias,
+                  child: TerminalView(
+                    _terminal,
+                    controller: _terminalController,
+                    autofocus: true,
+                    theme: TerminalThemes.defaultTheme,
+                    textStyle: const TerminalStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
                     ),
+                    padding: const EdgeInsets.all(10),
+                    keyboardAppearance: Brightness.dark,
+                    onSecondaryTapDown: (details, offset) async {
+                      final selection = _terminalController.selection;
+                      if (selection != null) {
+                        final text = _terminal.buffer.getText(selection);
+                        _terminalController.clearSelection();
+                        await Clipboard.setData(ClipboardData(text: text));
+                      } else {
+                        final data = await Clipboard.getData('text/plain');
+                        final text = data?.text;
+                        if (text != null) _terminal.paste(text);
+                      }
+                    },
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _command,
-                      enabled: _connected,
-                      onSubmitted: _sendCommand,
-                      textInputAction: TextInputAction.send,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      style: const TextStyle(fontFamily: 'monospace'),
-                      decoration: const InputDecoration(
-                        hintText: 'Enter a shell command',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _connected
-                        ? () => _sendCommand(_command.text)
-                        : null,
-                    icon: const Icon(Icons.send),
-                  ),
-                ],
               ),
             ],
           ),
@@ -340,6 +394,18 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       ),
     );
   }
+
+  Widget _terminalKeyButton(String label, TerminalKey key) => Padding(
+    padding: const EdgeInsets.only(right: 6),
+    child: OutlinedButton(
+      onPressed: _connected ? () => _sendKey(key) : null,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(42, 34),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+      ),
+      child: Text(label),
+    ),
+  );
 }
 
 class _Workspace {
