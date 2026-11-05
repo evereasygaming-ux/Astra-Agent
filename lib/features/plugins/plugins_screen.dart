@@ -62,6 +62,7 @@ class _PluginListState extends ConsumerState<_PluginList> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -216,12 +217,13 @@ class _PluginListState extends ConsumerState<_PluginList> {
         ),
       );
       folderController.dispose();
-      if (folder == null || folder.isEmpty) return;
+      if (folder == null || folder.isEmpty || !mounted) return;
       await _request(ref, 'POST', '/api/custom-plugins/repo/install', {
         'repo': repo,
         'path': selected.path,
         'folder': folder,
       }).timeout(const Duration(minutes: 3));
+      if (!mounted) return;
       await _load();
       if (mounted) _message('Installed ${selected.name}');
     } catch (error) {
