@@ -1,0 +1,12 @@
+{
+  "name": "AstraAgent Plugins",
+  "plugins": [
+    {
+      "path": "python-assistant",
+      "id": "python-assistant",
+      "name": "Python Assistant",
+      "version": "1.0.0",
+      "description": "Practical guidance for building, debugging, and maintaining Python projects."
+    }
+  ]
+}

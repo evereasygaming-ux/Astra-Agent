@@ -124,7 +124,9 @@ class _PluginListState extends ConsumerState<_PluginList> {
   }
 
   Future<void> _installFromGitHub() async {
-    final repoController = TextEditingController();
+    final repoController = TextEditingController(
+      text: 'evereasygaming-ux/AstraAgent-Plugins',
+    );
     final repo = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -135,7 +137,7 @@ class _PluginListState extends ConsumerState<_PluginList> {
           keyboardType: TextInputType.url,
           decoration: const InputDecoration(
             labelText: 'Repository',
-            hintText: 'owner/repo or GitHub URL',
+            hintText: 'evereasygaming-ux/AstraAgent-Plugins',
           ),
         ),
         actions: [
