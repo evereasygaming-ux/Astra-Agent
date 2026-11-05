@@ -125,6 +125,11 @@
 - Git page now shows the latest 12 commits with per-commit file diffs, and lets
   users switch or create local branches. Branch changes require a clean working
   tree and confirmation; Flutter analysis passes and device validation is pending.
+- GitHub PR workflow now lists up to 30 open pull requests and creates one from
+  the current clean, pushed branch, defaulting the base to the repository's
+  default branch. Bridge checks the OAuth token, GitHub origin, clean worktree,
+  and published upstream before creation. Flutter analysis and Go build pass;
+  device validation is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

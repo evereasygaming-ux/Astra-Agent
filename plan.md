@@ -122,6 +122,8 @@ This status is a static source review. No build or tests were run for this plan.
   Flutter analysis passes; device sync validation pending.
 - [x] Add recent commit history with per-commit file diffs and local branch
   switch/create controls. Flutter analysis passes; device validation pending.
+- [x] Add GitHub pull request listing and creation from a clean, pushed branch.
+  Flutter analysis and Go build pass; device validation is pending.
 - Evaluate browser preview and MCP/plugin support after core workflows work.
 
 ### Phase 4 - Distribution

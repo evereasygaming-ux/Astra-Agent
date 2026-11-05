@@ -90,6 +90,33 @@ type GitActionReq struct {
 	Create  bool     `json:"create,omitempty"`
 }
 
+// GitHubPullRequest is the compact pull request view returned to the app.
+type GitHubPullRequest struct {
+	Number    int    `json:"number"`
+	Title     string `json:"title"`
+	State     string `json:"state"`
+	URL       string `json:"url"`
+	Head      string `json:"head"`
+	Base      string `json:"base"`
+	Author    string `json:"author"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// GitHubPullRequestsResponse includes repository and branch context.
+type GitHubPullRequestsResponse struct {
+	PullRequests  []GitHubPullRequest `json:"pullRequests"`
+	DefaultBranch string              `json:"defaultBranch"`
+	HeadBranch    string              `json:"headBranch"`
+}
+
+// GitHubCreatePullRequestReq creates a PR from the current local branch.
+type GitHubCreatePullRequestReq struct {
+	Project string `json:"project"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	Base    string `json:"base"`
+}
+
 // GitDiffResponse represents unified diff for a file.
 type GitDiffResponse struct {
 	Path      string `json:"path"`

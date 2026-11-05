@@ -113,6 +113,34 @@ func (h *Handler) GitHubAuthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GitHubPullRequestsHandler lists open PRs or creates one from the current branch.
+func (h *Handler) GitHubPullRequestsHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		result, err := git.GetGitHubPullRequests(h.resolveProjectDir(r))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	case http.MethodPost:
+		var req models.GitHubCreatePullRequestReq
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid pull request payload"})
+			return
+		}
+		result, err := git.CreateGitHubPullRequest(h.resolvePostProjectDir(req.Project), req)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusCreated, result)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
 func (h *Handler) GitInitHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if rec := recover(); rec != nil {

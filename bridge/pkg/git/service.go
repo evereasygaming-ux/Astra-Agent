@@ -177,6 +177,186 @@ func ClearGitHubAccessToken() error {
 	return nil
 }
 
+func githubRepository(projectDir string) (string, string, error) {
+	remote, err := runGitCmd(projectDir, "remote", "get-url", "origin")
+	if err != nil {
+		return "", "", fmt.Errorf("set a GitHub origin before using pull requests")
+	}
+	u, err := url.Parse(strings.TrimSpace(remote))
+	if err != nil || !strings.EqualFold(u.Hostname(), "github.com") {
+		return "", "", fmt.Errorf("origin must point to github.com")
+	}
+	parts := strings.Split(strings.Trim(strings.TrimSuffix(u.Path, ".git"), "/"), "/")
+	if u.Scheme != "https" || len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("origin must be an HTTPS GitHub repository URL")
+	}
+	return parts[0], parts[1], nil
+}
+
+func githubAPIRequest(method, endpoint string, payload interface{}, target interface{}) error {
+	token, err := GitHubAccessToken()
+	if err != nil || token == "" {
+		return fmt.Errorf("connect your GitHub account first")
+	}
+	var body io.Reader
+	if payload != nil {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(encoded)
+	}
+	req, err := http.NewRequest(method, "https://api.github.com"+endpoint, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	if err != nil {
+		return fmt.Errorf("could not reach GitHub: %w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return fmt.Errorf("could not read GitHub response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var apiError struct {
+			Message string `json:"message"`
+		}
+		_ = json.Unmarshal(data, &apiError)
+		if apiError.Message == "" {
+			apiError.Message = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		}
+		return fmt.Errorf("GitHub: %s", apiError.Message)
+	}
+	if target != nil {
+		if err := json.Unmarshal(data, target); err != nil {
+			return fmt.Errorf("GitHub returned an invalid response")
+		}
+	}
+	return nil
+}
+
+// GetGitHubPullRequests returns open pull requests and current repository context.
+func GetGitHubPullRequests(projectDir string) (*models.GitHubPullRequestsResponse, error) {
+	owner, repo, err := githubRepository(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	status, err := GetStatus(projectDir)
+	if err != nil || !status.IsGitRepo {
+		return nil, fmt.Errorf("workspace is not a Git repository")
+	}
+	path := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo)
+	var repository struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := githubAPIRequest(http.MethodGet, path, nil, &repository); err != nil {
+		return nil, err
+	}
+	var pulls []struct {
+		Number    int    `json:"number"`
+		Title     string `json:"title"`
+		State     string `json:"state"`
+		HTMLURL   string `json:"html_url"`
+		CreatedAt string `json:"created_at"`
+		User      struct {
+			Login string `json:"login"`
+		} `json:"user"`
+		Head struct {
+			Ref string `json:"ref"`
+		} `json:"head"`
+		Base struct {
+			Ref string `json:"ref"`
+		} `json:"base"`
+	}
+	if err := githubAPIRequest(http.MethodGet, path+"/pulls?state=open&per_page=30", nil, &pulls); err != nil {
+		return nil, err
+	}
+	result := &models.GitHubPullRequestsResponse{
+		PullRequests:  make([]models.GitHubPullRequest, 0, len(pulls)),
+		DefaultBranch: repository.DefaultBranch,
+		HeadBranch:    status.Branch,
+	}
+	for _, pull := range pulls {
+		result.PullRequests = append(result.PullRequests, models.GitHubPullRequest{
+			Number: pull.Number, Title: pull.Title, State: pull.State,
+			URL: pull.HTMLURL, Head: pull.Head.Ref, Base: pull.Base.Ref,
+			Author: pull.User.Login, CreatedAt: pull.CreatedAt,
+		})
+	}
+	return result, nil
+}
+
+// CreateGitHubPullRequest opens a PR from the current, clean, published branch.
+func CreateGitHubPullRequest(projectDir string, req models.GitHubCreatePullRequestReq) (*models.GitHubPullRequest, error) {
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		return nil, fmt.Errorf("pull request title is required")
+	}
+	owner, repo, err := githubRepository(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	status, err := GetStatus(projectDir)
+	if err != nil || !status.IsGitRepo {
+		return nil, fmt.Errorf("workspace is not a Git repository")
+	}
+	if len(status.StagedFiles)+len(status.UnstagedFiles)+len(status.UntrackedFiles) > 0 {
+		return nil, fmt.Errorf("commit or stash workspace changes before opening a pull request")
+	}
+	if status.Tracking == "" || status.UnpushedCount > 0 {
+		return nil, fmt.Errorf("push the current branch to origin before opening a pull request")
+	}
+	if status.Branch == "HEAD" || strings.HasPrefix(status.Branch, "(HEAD") {
+		return nil, fmt.Errorf("switch to a named branch before opening a pull request")
+	}
+	base := strings.TrimSpace(req.Base)
+	if base == "" {
+		var repository struct {
+			DefaultBranch string `json:"default_branch"`
+		}
+		if err := githubAPIRequest(http.MethodGet, "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo), nil, &repository); err != nil {
+			return nil, err
+		}
+		base = repository.DefaultBranch
+	}
+	if base == "" || base == status.Branch {
+		return nil, fmt.Errorf("choose a base branch different from the current branch")
+	}
+	var created struct {
+		Number    int    `json:"number"`
+		Title     string `json:"title"`
+		State     string `json:"state"`
+		HTMLURL   string `json:"html_url"`
+		CreatedAt string `json:"created_at"`
+		User      struct {
+			Login string `json:"login"`
+		} `json:"user"`
+		Head struct {
+			Ref string `json:"ref"`
+		} `json:"head"`
+		Base struct {
+			Ref string `json:"ref"`
+		} `json:"base"`
+	}
+	path := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/pulls"
+	if err := githubAPIRequest(http.MethodPost, path, map[string]string{
+		"title": title, "body": req.Body, "head": status.Branch, "base": base,
+	}, &created); err != nil {
+		return nil, err
+	}
+	return &models.GitHubPullRequest{
+		Number: created.Number, Title: created.Title, State: created.State,
+		URL: created.HTMLURL, Head: created.Head.Ref, Base: created.Base.Ref,
+		Author: created.User.Login, CreatedAt: created.CreatedAt,
+	}, nil
+}
+
 func gitEnvironment(dir string) []string {
 	env := getEnv()
 	remoteCmd := exec.Command("git", "-C", dir, "remote", "get-url", "origin")

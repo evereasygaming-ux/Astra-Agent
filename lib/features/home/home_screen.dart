@@ -203,7 +203,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 12),
             _RoadmapCard(
               items: const [
-                'GitHub pull request workflows',
                 'Browser preview and MCP plugins',
                 'Project files and code search',
               ],

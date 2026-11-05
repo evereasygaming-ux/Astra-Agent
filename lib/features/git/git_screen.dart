@@ -368,6 +368,73 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     }
   }
 
+  Future<void> _openPullRequests() async {
+    final project = _projectPath;
+    if (project == null || !_remoteUsesGitHubHttps || _githubAccount == null) {
+      return;
+    }
+    try {
+      final result = await _request(
+        'GET',
+        '/api/git/github/pulls',
+        query: {'project': project},
+      );
+      final pullRequests = _items(result['pullRequests'])
+          .map(_GitHubPullRequest.fromJson)
+          .toList();
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => _PullRequestsSheet(
+          pullRequests: pullRequests,
+          defaultBranch: result['defaultBranch']?.toString() ?? '',
+          currentBranch: result['headBranch']?.toString() ?? '',
+          canCreate:
+              _status != null &&
+              !_hasLocalChanges(_status!) &&
+              _status!.tracking.isNotEmpty &&
+              _status!.unpushedCount == 0,
+          onCreate: (base) => _createPullRequest(base),
+        ),
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  Future<void> _createPullRequest(String defaultBranch) async {
+    final values = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) =>
+          _CreatePullRequestDialog(defaultBranch: defaultBranch),
+    );
+    final project = _projectPath;
+    if (values == null || project == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final pull = await _request(
+        'POST',
+        '/api/git/github/pulls',
+        body: {
+          'project': project,
+          'title': values['title'],
+          'body': values['body'],
+          'base': values['base'],
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Pull request #${pull['number']} created')),
+      );
+      await _loadStatus(showLoading: false);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _checkoutBranch(String? branch) async {
     final status = _status;
     if (branch == null ||
@@ -630,6 +697,17 @@ class _GitScreenState extends ConsumerState<GitScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed:
+                          _busy ||
+                              !_remoteUsesGitHubHttps ||
+                              _githubAccount == null
+                          ? null
+                          : _openPullRequests,
+                      icon: const Icon(Icons.merge_type),
+                      label: const Text('Pull requests'),
+                    ),
                     if (_remoteUrl.isEmpty || !_remoteUsesGitHubHttps)
                       const Padding(
                         padding: EdgeInsets.only(top: 4),
@@ -727,6 +805,174 @@ class _GitScreenState extends ConsumerState<GitScreen> {
       ),
     );
   }
+}
+
+class _PullRequestsSheet extends StatelessWidget {
+  const _PullRequestsSheet({
+    required this.pullRequests,
+    required this.defaultBranch,
+    required this.currentBranch,
+    required this.canCreate,
+    required this.onCreate,
+  });
+
+  final List<_GitHubPullRequest> pullRequests;
+  final String defaultBranch;
+  final String currentBranch;
+  final bool canCreate;
+  final ValueChanged<String> onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final branchReady =
+        canCreate && currentBranch.isNotEmpty && currentBranch != defaultBranch;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Open pull requests',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            if (pullRequests.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text('No open pull requests.'),
+              )
+            else
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: pullRequests.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final pull = pullRequests[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.merge_type),
+                      title: Text('#${pull.number} ${pull.title}'),
+                      subtitle: SelectableText(
+                        '${pull.head} → ${pull.base}\n${pull.url}',
+                        maxLines: 3,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: branchReady ? () => onCreate(defaultBranch) : null,
+              icon: const Icon(Icons.add),
+              label: const Text('Create pull request'),
+            ),
+            if (!branchReady)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Use a clean, pushed branch with an upstream, different from the default branch.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CreatePullRequestDialog extends StatefulWidget {
+  const _CreatePullRequestDialog({required this.defaultBranch});
+
+  final String defaultBranch;
+
+  @override
+  State<_CreatePullRequestDialog> createState() =>
+      _CreatePullRequestDialogState();
+}
+
+class _CreatePullRequestDialogState extends State<_CreatePullRequestDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _bodyController;
+  late final TextEditingController _baseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController();
+    _bodyController = TextEditingController();
+    _baseController = TextEditingController(text: widget.defaultBranch);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    _baseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Create pull request'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _titleController,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Title'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _baseController,
+            decoration: const InputDecoration(labelText: 'Base branch'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _bodyController,
+            minLines: 3,
+            maxLines: 6,
+            decoration: const InputDecoration(labelText: 'Description'),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () {
+          final title = _titleController.text.trim();
+          final base = _baseController.text.trim();
+          if (title.isEmpty || base.isEmpty) return;
+          Navigator.pop(context, {
+            'title': title,
+            'body': _bodyController.text.trim(),
+            'base': base,
+          });
+        },
+        child: const Text('Create'),
+      ),
+    ],
+  );
 }
 
 class _NotRepository extends StatelessWidget {
@@ -1591,6 +1837,31 @@ class _Project {
 class _GitHubAccount {
   const _GitHubAccount(this.login);
   final String login;
+}
+
+class _GitHubPullRequest {
+  const _GitHubPullRequest({
+    required this.number,
+    required this.title,
+    required this.url,
+    required this.head,
+    required this.base,
+  });
+
+  final int number;
+  final String title;
+  final String url;
+  final String head;
+  final String base;
+
+  factory _GitHubPullRequest.fromJson(Map<dynamic, dynamic> json) =>
+      _GitHubPullRequest(
+        number: (json['number'] as num?)?.toInt() ?? 0,
+        title: json['title']?.toString() ?? '',
+        url: json['url']?.toString() ?? '',
+        head: json['head']?.toString() ?? '',
+        base: json['base']?.toString() ?? '',
+      );
 }
 
 class _GitBranch {

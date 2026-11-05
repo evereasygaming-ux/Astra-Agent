@@ -329,6 +329,7 @@ func main() {
 	mux.HandleFunc("/api/git/status", h.GitStatusHandler)
 	mux.HandleFunc("/api/git/init", h.GitInitHandler)
 	mux.HandleFunc("/api/git/github/auth", h.GitHubAuthHandler)
+	mux.HandleFunc("/api/git/github/pulls", h.GitHubPullRequestsHandler)
 	mux.HandleFunc("/api/git/config", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			h.GitSetConfigHandler(w, r)
