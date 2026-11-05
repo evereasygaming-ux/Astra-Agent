@@ -22,6 +22,7 @@ class _GitScreenState extends ConsumerState<GitScreen> {
   List<_Project> _projects = [];
   String? _projectPath;
   _GitStatus? _status;
+  String _remoteUrl = '';
   _GitHubAccount? _githubAccount;
   String? _error;
   String? _githubError;
@@ -42,6 +43,7 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     Map<String, String>? query,
     Object? body,
     bool allowList = false,
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     final bridge = ref.read(bridgeServiceProvider);
     final uri = (await bridge.resolve(path)).replace(queryParameters: query);
@@ -49,7 +51,7 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     headers['Content-Type'] = 'application/json';
     final request = http.Request(method, uri)..headers.addAll(headers);
     if (body != null) request.body = jsonEncode(body);
-    final streamed = await request.send().timeout(const Duration(seconds: 20));
+    final streamed = await request.send().timeout(timeout);
     final response = await http.Response.fromStream(streamed);
     dynamic decoded;
     try {
@@ -120,9 +122,15 @@ class _GitScreenState extends ConsumerState<GitScreen> {
         '/api/git/status',
         query: {'project': project},
       );
+      final config = await _request(
+        'GET',
+        '/api/git/config',
+        query: {'project': project},
+      );
       if (!mounted) return;
       setState(() {
         _status = _GitStatus.fromJson(json);
+        _remoteUrl = config['remoteUrl']?.toString() ?? '';
         _loading = false;
         _error = json['error']?.toString();
       });
@@ -141,6 +149,7 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     setState(() {
       _projectPath = path;
       _status = null;
+      _remoteUrl = '';
     });
     await _loadStatus();
   }
@@ -242,7 +251,12 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     }
   }
 
-  Future<void> _perform(String label, String path, {Object? body}) async {
+  Future<void> _perform(
+    String label,
+    String path, {
+    Object? body,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
     final project = _projectPath;
     if (project == null || _busy) return;
     setState(() {
@@ -252,7 +266,12 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     try {
       final payload = <String, dynamic>{'project': project};
       if (body is Map<String, dynamic>) payload.addAll(body);
-      final result = await _request('POST', path, body: payload);
+      final result = await _request(
+        'POST',
+        path,
+        body: payload,
+        timeout: timeout,
+      );
       if (result['success'] == false) {
         throw _GitException(result['error']?.toString() ?? '$label failed.');
       }
@@ -270,6 +289,72 @@ class _GitScreenState extends ConsumerState<GitScreen> {
 
   Future<void> _initRepository() =>
       _perform('Git repository initialized', '/api/git/init');
+
+  bool get _remoteUsesGitHubHttps => _isGitHubHttpsRemote(_remoteUrl);
+
+  bool _hasLocalChanges(_GitStatus status) =>
+      status.staged.isNotEmpty ||
+      status.unstaged.isNotEmpty ||
+      status.untracked.isNotEmpty;
+
+  Future<void> _editRemote() async {
+    final remote = await showDialog<String>(
+      context: context,
+      builder: (context) => _RemoteDialog(initialValue: _remoteUrl),
+    );
+    if (remote == null || !mounted) return;
+    if (!_isGitHubHttpsRemote(remote)) {
+      setState(() => _error = 'Enter an HTTPS URL from github.com.');
+      return;
+    }
+    await _perform(
+      'Save origin remote',
+      '/api/git/config',
+      body: {'remoteUrl': remote.trim()},
+    );
+  }
+
+  Future<void> _push() async {
+    final status = _status;
+    if (status == null || status.unpushedCount == 0) return;
+    await _perform(
+      'Push',
+      '/api/git/push',
+      timeout: const Duration(minutes: 3),
+    );
+  }
+
+  Future<void> _pull() async {
+    final status = _status;
+    if (status == null || _hasLocalChanges(status)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pull from GitHub?'),
+        content: Text(
+          'Pull changes from origin into ${status.branch}. '
+          'The workspace is clean, so Git can update its files safely.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pull'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _perform(
+        'Pull',
+        '/api/git/pull',
+        timeout: const Duration(minutes: 3),
+      );
+    }
+  }
 
   Future<void> _stageAll() => _perform('Stage all changes', '/api/git/stage');
 
@@ -394,6 +479,75 @@ class _GitScreenState extends ConsumerState<GitScreen> {
                     _NotRepository(onInit: _busy ? null : _initRepository)
                   else ...[
                     _BranchCard(status: status),
+                    const SizedBox(height: 8),
+                    _RemoteCard(
+                      remoteUrl: _remoteUrl,
+                      supportsGitHubAuth: _remoteUsesGitHubHttps,
+                      onEdit: _busy ? null : _editRemote,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                _busy ||
+                                    !_remoteUsesGitHubHttps ||
+                                    _githubAccount == null ||
+                                    _hasLocalChanges(status)
+                                ? null
+                                : _pull,
+                            icon: const Icon(Icons.download_outlined),
+                            label: const Text('Pull'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed:
+                                _busy ||
+                                    !_remoteUsesGitHubHttps ||
+                                    _githubAccount == null ||
+                                    status.unpushedCount == 0
+                                ? null
+                                : _push,
+                            icon: const Icon(Icons.upload_outlined),
+                            label: Text(
+                              status.unpushedCount == 0
+                                  ? 'Push'
+                                  : 'Push ${status.unpushedCount}',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_remoteUrl.isEmpty || !_remoteUsesGitHubHttps)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Set an HTTPS github.com origin to sync.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                        ),
+                      )
+                    else if (_githubAccount == null)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Connect GitHub above to enable remote sync.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                        ),
+                      )
+                    else if (_hasLocalChanges(status))
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Commit or stash local changes before pulling.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                        ),
+                      ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -774,6 +928,86 @@ class _BranchCard extends StatelessWidget {
   );
 }
 
+class _RemoteCard extends StatelessWidget {
+  const _RemoteCard({
+    required this.remoteUrl,
+    required this.supportsGitHubAuth,
+    required this.onEdit,
+  });
+
+  final String remoteUrl;
+  final bool supportsGitHubAuth;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      leading: const Icon(Icons.cloud_outlined),
+      title: const Text('Origin'),
+      subtitle: Text(
+        remoteUrl.isEmpty
+            ? 'No remote configured'
+            : supportsGitHubAuth
+            ? remoteUrl
+            : '$remoteUrl\nUse an HTTPS github.com origin for app sign-in',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: IconButton(
+        tooltip: remoteUrl.isEmpty ? 'Set origin' : 'Edit origin',
+        onPressed: onEdit,
+        icon: const Icon(Icons.edit_outlined),
+      ),
+    ),
+  );
+}
+
+class _RemoteDialog extends StatefulWidget {
+  const _RemoteDialog({required this.initialValue});
+
+  final String initialValue;
+
+  @override
+  State<_RemoteDialog> createState() => _RemoteDialogState();
+}
+
+class _RemoteDialogState extends State<_RemoteDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('GitHub origin'),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      autocorrect: false,
+      keyboardType: TextInputType.url,
+      decoration: const InputDecoration(
+        labelText: 'HTTPS repository URL',
+        hintText: 'https://github.com/owner/repository.git',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _controller.text.trim()),
+        child: const Text('Save'),
+      ),
+    ],
+  );
+}
+
 class _FileSection extends StatelessWidget {
   const _FileSection({
     required this.title,
@@ -985,6 +1219,7 @@ class _GitStatus {
     required this.tracking,
     required this.ahead,
     required this.behind,
+    required this.unpushedCount,
     required this.staged,
     required this.unstaged,
     required this.untracked,
@@ -995,6 +1230,7 @@ class _GitStatus {
   final String tracking;
   final int ahead;
   final int behind;
+  final int unpushedCount;
   final List<_GitFile> staged;
   final List<_GitFile> unstaged;
   final List<_GitFile> untracked;
@@ -1005,6 +1241,7 @@ class _GitStatus {
     tracking: json['tracking']?.toString() ?? '',
     ahead: _intValue(json['ahead']),
     behind: _intValue(json['behind']),
+    unpushedCount: _intValue(json['unpushedCount']),
     staged: _files(json['stagedFiles'], staged: true),
     unstaged: _files(json['unstagedFiles']),
     untracked: _files(json['untrackedFiles']),
@@ -1033,6 +1270,14 @@ List<_GitFile> _files(Object? value, {bool staged = false}) => value is List
 
 int _intValue(Object? value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+
+bool _isGitHubHttpsRemote(String remote) {
+  final uri = Uri.tryParse(remote.trim());
+  return uri != null &&
+      uri.scheme.toLowerCase() == 'https' &&
+      uri.host.toLowerCase() == 'github.com' &&
+      uri.pathSegments.length >= 2;
+}
 
 class _GitException implements Exception {
   const _GitException(this.message);

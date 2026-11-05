@@ -118,6 +118,8 @@ This status is a static source review. No build or tests were run for this plan.
 - [x] Add Git workspace status, file diffs, stage/unstage, stage all, repository
   initialization, commits, and GitHub OAuth device sign-in. Flutter analysis and
   Go compilation pass; user confirmed OAuth sign-in works on device.
+- [x] Add GitHub origin setup, push, and pull. Pull is limited to a clean workspace;
+  Flutter analysis passes; device sync validation pending.
 - Evaluate browser preview and MCP/plugin support after core workflows work.
 
 ### Phase 4 - Distribution

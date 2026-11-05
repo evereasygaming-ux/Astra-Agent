@@ -118,6 +118,10 @@
   access token, stores it outside repositories with owner-only file permissions,
   and supplies it through askpass for HTTPS github.com remotes. The user confirmed
   GitHub connect succeeds on device after the polling request/retry fix.
+- Git page now supports setting an HTTPS GitHub origin and authenticated push and
+  pull. Pull requires a clean working tree and user confirmation; push is shown
+  when there are unpushed commits. Flutter analysis passes; device sync validation
+  is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences
