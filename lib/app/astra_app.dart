@@ -81,6 +81,10 @@ class _BrandLoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screen = MediaQuery.sizeOf(context);
+    final splashSize = screen.width * 0.82 < screen.height * 0.58
+        ? screen.width * 0.82
+        : screen.height * 0.58;
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: DecoratedBox(
@@ -99,8 +103,9 @@ class _BrandLoadingScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 18),
                 child: Image.asset(
                   'assets/branding/astra_code_splash.png',
-                  width: MediaQuery.sizeOf(context).width * 0.82,
-                  height: MediaQuery.sizeOf(context).width * 0.82,
+                  semanticLabel: 'Astra Code Agent splash logo',
+                  width: splashSize,
+                  height: splashSize,
                   fit: BoxFit.contain,
                 ),
               ),

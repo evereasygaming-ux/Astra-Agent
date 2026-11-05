@@ -224,6 +224,7 @@ class _Header extends StatelessWidget {
           height: 72,
           child: Image.asset(
             'assets/branding/astra_code_home_logo.png',
+            semanticLabel: 'Astra Code Agent',
             fit: BoxFit.contain,
           ),
         ),

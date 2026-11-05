@@ -10,7 +10,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1200));
     await tester.pumpAndSettle();
 
-    expect(find.text('Astra Code Agent'), findsOneWidget);
+    expect(find.bySemanticsLabel('Astra Code Agent'), findsOneWidget);
 
     final homeList = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(
