@@ -76,7 +76,7 @@ class ClaudeJob {
       kind: json['kind'] as String? ?? '',
       running: json['running'] == true,
       log: json['log'] as String? ?? '',
-      exitCode: (json['exit_code'] as num?)?.toInt(),
+      exitCode: _parseInt(json['exit_code']),
     );
   }
 }
@@ -110,4 +110,10 @@ class ClaudeLogin {
       automaticUrl: json['automatic_url'] as String?,
     );
   }
+}
+
+int? _parseInt(Object? value) {
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
 }

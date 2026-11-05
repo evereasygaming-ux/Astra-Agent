@@ -20,7 +20,7 @@ class AgyHubStatus {
     return AgyHubStatus(
       active: json['active'] == true,
       status: json['status'] as String? ?? 'stopped',
-      port: (json['port'] as num?)?.toInt(),
+      port: _parseInt(json['port']),
       error: json['error'] as String?,
       logs: logsRaw is List ? logsRaw.map((e) => e.toString()).toList() : const [],
     );
@@ -44,10 +44,16 @@ class AgyRuntimeStatus {
     return AgyRuntimeStatus(
       installed: json['installed'] == true,
       path: json['path'] as String?,
-      size: (json['size'] as num?)?.toInt() ?? 0,
+      size: _parseInt(json['size']) ?? 0,
       wrapper: json['wrapper'] == true,
     );
   }
+}
+
+int? _parseInt(Object? value) {
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
 }
 
 class AgyLoginUrl {

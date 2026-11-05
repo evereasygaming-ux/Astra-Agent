@@ -208,8 +208,8 @@ class BridgeService {
         : BridgePhase.error;
     return BridgeStatus(
       phase: phase,
-      pid: (raw['pid'] as num?)?.toInt() ?? 0,
-      port: (raw['port'] as num?)?.toInt() ?? AppInfo.bridgePort,
+      pid: _parseInt(raw['pid']) ?? 0,
+      port: _parseInt(raw['port']) ?? AppInfo.bridgePort,
       error: error,
       log: raw['log'] as String? ?? '',
     );
@@ -222,4 +222,10 @@ class BridgeService {
     }
     return text.substring(text.length - max);
   }
+}
+
+int? _parseInt(Object? value) {
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
 }
