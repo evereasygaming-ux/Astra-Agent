@@ -94,11 +94,14 @@ This status is a static source review. No build or tests were run for this plan.
 
 ### Phase 2 - Agent chat
 
-- Implement the chat experience on top of the existing Claude bridge protocol.
+- [x] Implement workspace selection and Claude Code stream-json chat.
+- [x] Add Antigravity model discovery and prompt streaming through AGY Hub gRPC.
 - Map AntiGem interactions such as streaming, tool approvals, questions,
   attachments, and session controls before choosing the first supported subset.
-- Add AGY chat/model switching after validating the current bridge protocol
-  integration.
+- Validate AGY chat against the user's live Debian Hub; the current work has
+  compile/schema validation but no live device RPC run yet.
+- Add AGY tool approval/questions and persistent conversation history after the
+  basic prompt/response path is confirmed on-device.
 
 ### Phase 3 - Coding workspace
 

@@ -1,13 +1,18 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
+	"gemini-server/pkg/agy"
 	"gemini-server/pkg/config"
 )
 
@@ -35,6 +40,7 @@ type HubStatusProvider interface {
 type Hub struct {
 	Cfg        *config.Config
 	StatusProv HubStatusProvider
+	AgyClient  *agy.Client
 	HubPort    string
 	clients    map[*ClientConn]bool
 	mu         sync.RWMutex
@@ -83,6 +89,7 @@ type clientMessage struct {
 	Model          string `json:"model"`
 	Prompt         string `json:"prompt"`
 	WorkspaceDir   string `json:"workspaceDir"`
+	IsNew          bool   `json:"isNew"`
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
@@ -152,10 +159,83 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 			})
 
 		case "send_prompt":
-			_ = client.SendJSON(map[string]interface{}{
-				"type":  "error",
-				"error": "Chat is managed directly via AGY Hub on port 1235",
-			})
+			h.serveAgyPrompt(client, msg)
 		}
 	}
+}
+
+var errAgyTurnComplete = errors.New("Antigravity turn complete")
+
+func (h *Hub) serveAgyPrompt(client *ClientConn, msg clientMessage) {
+	if h.AgyClient == nil {
+		_ = client.SendJSON(map[string]interface{}{"type": "error", "error": "Antigravity chat is unavailable in this bridge build"})
+		return
+	}
+	if msg.Prompt == "" {
+		_ = client.SendJSON(map[string]interface{}{"type": "error", "error": "prompt is required"})
+		return
+	}
+	conversationID := msg.ConversationID
+	if conversationID == "" {
+		conversationID = uuid.NewString()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+	if msg.IsNew {
+		if err := h.AgyClient.StartCascade(ctx, conversationID, msg.WorkspaceDir, msg.Model); err != nil {
+			_ = client.SendJSON(map[string]interface{}{"type": "error", "error": err.Error()})
+			return
+		}
+	}
+	if err := h.AgyClient.SendPrompt(ctx, conversationID, msg.Prompt, msg.Model); err != nil {
+		_ = client.SendJSON(map[string]interface{}{"type": "error", "error": err.Error()})
+		return
+	}
+	_ = client.SendJSON(map[string]interface{}{
+		"type":           "session_attached",
+		"conversationId": conversationID,
+		"isRunning":      true,
+	})
+
+	latestUserStep := -1
+	sawCurrentResponse := false
+	err := h.AgyClient.Stream(ctx, conversationID, func(update map[string]any) error {
+		if updateBody, ok := update["update"].(map[string]any); ok {
+			trajectory, _ := updateBody["mainTrajectoryUpdate"].(map[string]any)
+			if stepsUpdate, ok := trajectory["stepsUpdate"].(map[string]any); ok {
+				steps, _ := stepsUpdate["steps"].([]any)
+				indices, _ := stepsUpdate["indices"].([]any)
+				for i, rawStep := range steps {
+					step, _ := rawStep.(map[string]any)
+					metadata, _ := step["metadata"].(map[string]any)
+					source, _ := metadata["sourceTrajectoryStepInfo"].(map[string]any)
+					stepIndex, _ := source["stepIndex"].(float64)
+					if stepIndex == 0 && i < len(indices) {
+						stepIndex, _ = indices[i].(float64)
+					}
+					if step["userInput"] != nil || step["type"] == "CORTEX_STEP_TYPE_USER_INPUT" {
+						if int(stepIndex) > latestUserStep {
+							latestUserStep = int(stepIndex)
+							sawCurrentResponse = false
+						}
+					}
+					if int(stepIndex) > latestUserStep && (step["plannerResponse"] != nil || step["errorMessage"] != nil) {
+						sawCurrentResponse = true
+					}
+				}
+			}
+			if updateBody["fullyIdle"] == true && sawCurrentResponse {
+				if err := client.SendJSON(map[string]any{"type": "agy_event", "data": update}); err != nil {
+					return err
+				}
+				return errAgyTurnComplete
+			}
+		}
+		return client.SendJSON(map[string]any{"type": "agy_event", "data": update})
+	})
+	if err != nil && !errors.Is(err, errAgyTurnComplete) {
+		_ = client.SendJSON(map[string]interface{}{"type": "error", "error": err.Error()})
+		return
+	}
+	_ = client.SendJSON(map[string]interface{}{"type": "done", "conversationId": conversationID, "exitCode": 0})
 }

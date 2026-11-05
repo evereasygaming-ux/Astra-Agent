@@ -18,6 +18,7 @@ import (
 	"time"
 
 	// DNS for Android (no /etc/resolv.conf there); a package so `go build main.go` includes it too
+	"gemini-server/pkg/agy"
 	_ "gemini-server/pkg/androiddns"
 	"gemini-server/pkg/claude"
 	"gemini-server/pkg/config"
@@ -561,6 +562,8 @@ func main() {
 		hubMgr.SetStopped()
 	}
 	h.HubManager = hubMgr
+	h.AgyClient = &agy.Client{HubPort: hubPort, SecurityToken: secToken, Status: hubMgr}
+	wsHub.AgyClient = h.AgyClient
 	wsHub.StatusProv = hubMgr
 	wsHub.HubPort = hubPort
 	hubMgr.OnLoginURL = h.HandleLoginURL

@@ -68,6 +68,22 @@
 - Reconcile documentation with the implementation as the Debian integration
   evolves.
 
+## Current implementation (2026-11-05)
+
+- Claude chat MVP is implemented in Flutter: workspace picker, session WebSocket,
+  streamed response, and new-chat reset.
+- Antigravity chat is now wired through the Go bridge using the AGY
+  `LanguageServerService` gRPC protocol: model discovery, cascade creation,
+  prompt submission, and trajectory update streaming.
+- The protocol schema is derived from AntiGem v1.0.19 (`babb5ded`) and remains
+  covered by the retained GPL-3.0 bridge license/attribution.
+- Local `go build ./...`, dynamic protocol-schema compilation, `flutter analyze`,
+  and `git diff --check` passed for this change. A GitHub Actions APK build and
+  live RPC validation against the Debian Hub are still pending.
+- AGY chat sends command execution policy `CASCADE_COMMANDS_AUTO_EXECUTION_EAGER`,
+  matching the AntiGem v1.0.19 chat flow. Interactive approval/question UI,
+  attachments, and saved chat history are not part of this first AGY pass.
+
 ## Collaboration preferences
 
 - User prefers direct progress and concrete repository analysis.

@@ -197,8 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 12),
             _RoadmapCard(
               items: const [
-                'Claude Code chat over the Go bridge',
-                'AGY gRPC agent and model switching',
+                'AGY approvals, questions and saved chat history',
                 'Native terminal, editor and Git',
                 'Browser automation and MCP plugins',
               ],

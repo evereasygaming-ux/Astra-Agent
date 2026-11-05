@@ -22,14 +22,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scroll = ScrollController();
   final List<_ChatMessage> _messages = [];
   List<_Workspace> _workspaces = [];
+  List<_AgentModel> _models = [];
+  final Map<int, String> _agyTextByStep = {};
   String? _workspace;
   String _agent = 'Claude Code';
+  String? _selectedModel;
   String? _sessionId;
   WebSocket? _socket;
   StreamSubscription<dynamic>? _subscription;
   bool _loadingWorkspaces = true;
   bool _sending = false;
   bool _sawStreamText = false;
+  bool _agyStarted = false;
+  bool _loadingModels = false;
   String? _error;
 
   @override
@@ -87,18 +92,84 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  void _selectAgent(String? value) {
+    final next = value ?? 'Claude Code';
+    setState(() {
+      _agent = next;
+      _models = [];
+      _selectedModel = null;
+      _error = null;
+    });
+    if (next == 'Antigravity') unawaited(_loadModels());
+  }
+
+  Future<void> _loadModels() async {
+    if (_loadingModels) return;
+    setState(() => _loadingModels = true);
+    try {
+      final bridge = ref.read(bridgeServiceProvider);
+      final response = await http
+          .get(
+            await bridge.resolve('/api/models?agent=agy'),
+            headers: await bridge.authHeaders(),
+          )
+          .timeout(const Duration(seconds: 25));
+      final body = jsonDecode(response.body);
+      if (response.statusCode != 200 || body is! Map<String, dynamic>) {
+        final error = body is Map ? body['error']?.toString() : null;
+        throw HttpException(error ?? 'HTTP ${response.statusCode}');
+      }
+      final available = (body['models'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => _AgentModel(
+              id: item['id']?.toString() ?? '',
+              key: item['key']?.toString() ?? '',
+              name:
+                  item['displayName']?.toString() ??
+                  item['id']?.toString() ??
+                  '',
+            ),
+          )
+          .where((model) => model.id.isNotEmpty && model.name.isNotEmpty)
+          .toList();
+      final defaultModel = body['defaultModel']?.toString();
+      final defaults = available
+          .where(
+            (model) => model.id == defaultModel || model.key == defaultModel,
+          )
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _models = available;
+        _selectedModel = defaults.isNotEmpty
+            ? defaults.first.id
+            : available.isNotEmpty
+            ? available.first.id
+            : null;
+        _loadingModels = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingModels = false;
+        _error = 'Could not load Antigravity models: $error';
+      });
+    }
+  }
+
   Future<void> _send() async {
     final text = _prompt.text.trim();
     if (text.isEmpty || _sending) return;
-    if (_agent != 'Claude Code') {
-      setState(
-        () => _error =
-            'Antigravity chat is not connected in this bridge build yet.',
-      );
-      return;
-    }
     if (_workspace == null) {
       setState(() => _error = 'Choose a workspace first.');
+      return;
+    }
+    if (_agent == 'Antigravity' && _selectedModel == null) {
+      setState(
+        () => _error =
+            'Antigravity models are not loaded. Refresh them and try again.',
+      );
       return;
     }
 
@@ -106,6 +177,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _error = null;
       _sending = true;
       _sawStreamText = false;
+      _agyTextByStep.clear();
       _messages.add(_ChatMessage(text: text, isUser: true));
       _messages.add(_ChatMessage(text: '', isUser: false));
       _prompt.clear();
@@ -114,18 +186,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       if (_socket == null) await _connect();
-      final message = {
-        'type': 'user',
-        'message': {'role': 'user', 'content': text},
-        'parent_tool_use_id': null,
-        'session_id': _sessionId,
-      };
+      final message = _agent == 'Claude Code'
+          ? {
+              'type': 'user',
+              'message': {'role': 'user', 'content': text},
+              'parent_tool_use_id': null,
+              'session_id': _sessionId,
+            }
+          : {
+              'type': 'send_prompt',
+              'conversationId': _sessionId,
+              'model': _selectedModel,
+              'prompt': text,
+              'workspaceDir': _workspace,
+              'isNew': !_agyStarted,
+            };
       _socket!.add(jsonEncode(message));
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _sending = false;
-        _error = 'Could not start Claude session: $error';
+        _error = 'Could not start $_agent session: $error';
         if (_messages.isNotEmpty &&
             !_messages.last.isUser &&
             _messages.last.text.isEmpty) {
@@ -138,16 +219,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _connect() async {
     final id = _sessionId ?? _newId();
     final bridge = ref.read(bridgeServiceProvider);
+    final isClaude = _agent == 'Claude Code';
     final uri = await bridge
-        .resolve('/api/claude/session')
+        .resolve(isClaude ? '/api/claude/session' : '/ws')
         .then(
           (value) => value.replace(
             scheme: value.scheme == 'https' ? 'wss' : 'ws',
-            queryParameters: {
-              'id': id,
-              'cwd': _workspace!,
-              'permission_mode': 'default',
-            },
+            queryParameters: isClaude
+                ? {'id': id, 'cwd': _workspace!, 'permission_mode': 'default'}
+                : null,
           ),
         );
     final socket = await WebSocket.connect(
@@ -162,7 +242,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (mounted) {
           setState(() {
             _sending = false;
-            _error = 'Claude connection failed: $error';
+            _error = 'Agent connection failed: $error';
           });
         }
         _socket = null;
@@ -179,11 +259,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     try {
       final data = jsonDecode(frame as String);
       if (data is! Map<String, dynamic>) return;
-      if (data['type'] == 'bridge_error') {
+      if (data['type'] == 'error' || data['type'] == 'bridge_error') {
         setState(() {
           _sending = false;
           _error = data['error']?.toString();
         });
+        return;
+      }
+      if (data['type'] == 'done') {
+        setState(() => _sending = false);
+        return;
+      }
+      if (data['type'] == 'session_attached' && _agent == 'Antigravity') {
+        _agyStarted = true;
+        return;
+      }
+      if (data['type'] == 'agy_event') {
+        _consumeAgyUpdate(data['data']);
         return;
       }
       if (data['type'] == 'bridge_state') {
@@ -256,6 +348,52 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return '';
   }
 
+  void _consumeAgyUpdate(Object? raw) {
+    if (raw is! Map<String, dynamic>) return;
+    final update = raw['update'];
+    if (update is! Map<String, dynamic>) return;
+    final trajectory = update['mainTrajectoryUpdate'];
+    if (trajectory is! Map<String, dynamic>) return;
+    final stepsUpdate = trajectory['stepsUpdate'];
+    if (stepsUpdate is! Map<String, dynamic>) return;
+    final steps = stepsUpdate['steps'];
+    if (steps is! List) return;
+    final indices = stepsUpdate['indices'];
+    for (var i = 0; i < steps.length; i++) {
+      final step = steps[i];
+      if (step is! Map) continue;
+      final metadata = step['metadata'];
+      final source = metadata is Map
+          ? metadata['sourceTrajectoryStepInfo']
+          : null;
+      final rawIndex = source is Map ? source['stepIndex'] : null;
+      final index = rawIndex is num
+          ? rawIndex.toInt()
+          : indices is List && i < indices.length && indices[i] is num
+          ? (indices[i] as num).toInt()
+          : i;
+      final planner = step['plannerResponse'];
+      if (planner is Map) {
+        final response = planner['response']?.toString() ?? '';
+        if (response.isNotEmpty) _agyTextByStep[index] = response;
+      }
+      final stepError = step['errorMessage'];
+      if (stepError is Map) {
+        final message = stepError['message']?.toString() ?? '';
+        if (message.isNotEmpty) _agyTextByStep[index] = '⚠️ $message';
+      }
+    }
+    final response = _agyTextByStep.keys.toList()..sort();
+    final text = response.map((index) => _agyTextByStep[index]!).join('\n\n');
+    if (text.isEmpty) return;
+    setState(() {
+      if (_messages.isNotEmpty && !_messages.last.isUser) {
+        _messages[_messages.length - 1] = _messages.last.copyWith(text: text);
+      }
+    });
+    _scrollToBottom();
+  }
+
   String _newId() {
     final random = Random.secure();
     String part(int count) => List.generate(
@@ -286,6 +424,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _socket = null;
       _sessionId = null;
       _messages.clear();
+      _agyTextByStep.clear();
+      _agyStarted = false;
       _sending = false;
       _error = null;
     });
@@ -328,15 +468,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           ),
                           DropdownMenuItem(
                             value: 'Antigravity',
-                            child: Text('Antigravity · unavailable'),
+                            child: Text('Antigravity'),
                           ),
                         ],
                         onChanged: _sending || _sessionId != null
                             ? null
-                            : (value) => setState(() {
-                                _agent = value ?? 'Claude Code';
-                                _error = null;
-                              }),
+                            : _selectAgent,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -369,13 +506,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ],
                 ),
-                if (!bridge.isRunning || _agent == 'Antigravity')
+                if (_agent == 'Antigravity') ...[
+                  const SizedBox(height: 8),
+                  _loadingModels
+                      ? const LinearProgressIndicator()
+                      : DropdownButtonFormField<String>(
+                          initialValue: _selectedModel,
+                          decoration: InputDecoration(
+                            labelText: 'Antigravity model',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: IconButton(
+                              tooltip: 'Refresh models',
+                              onPressed: _sessionId != null || _loadingModels
+                                  ? null
+                                  : _loadModels,
+                              icon: const Icon(Icons.refresh, size: 18),
+                            ),
+                          ),
+                          items: _models
+                              .map(
+                                (model) => DropdownMenuItem(
+                                  value: model.id,
+                                  child: Text(
+                                    model.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _sending || _sessionId != null
+                              ? null
+                              : (value) =>
+                                    setState(() => _selectedModel = value),
+                        ),
+                ],
+                if (!bridge.isRunning)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      _agent == 'Antigravity'
-                          ? 'AGY Hub is online, but prompt sending is not implemented in the bridge yet.'
-                          : 'Start the bridge from Home before chatting.',
+                      'Start the bridge from Home before chatting.',
                       style: const TextStyle(
                         color: AppTheme.muted,
                         fontSize: 12,
@@ -453,6 +623,13 @@ class _Workspace {
   const _Workspace({required this.name, required this.path});
   final String name;
   final String path;
+}
+
+class _AgentModel {
+  const _AgentModel({required this.id, required this.key, required this.name});
+  final String id;
+  final String key;
+  final String name;
 }
 
 class _ChatMessage {

@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -25,6 +26,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"gemini-server/pkg/agy"
 	"gemini-server/pkg/config"
 	"gemini-server/pkg/hub"
 	"gemini-server/pkg/models"
@@ -45,6 +47,7 @@ type Broadcaster interface {
 type Handler struct {
 	Cfg        *config.Config
 	HubManager *hub.HubManager
+	AgyClient  *agy.Client
 	Hub        Broadcaster
 	OnShutdown func()
 
@@ -130,6 +133,21 @@ func (h *Handler) StatusHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ModelsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("agent") == "agy" {
+		if h.AgyClient == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"success": false, "error": "Antigravity client is unavailable"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		models, err := h.AgyClient.Models(ctx)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, models)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"models": []interface{}{}})
 }
 
