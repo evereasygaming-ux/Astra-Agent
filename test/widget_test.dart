@@ -7,9 +7,10 @@ import 'package:astra_agent/app/astra_app.dart';
 void main() {
   testWidgets('home screen renders', (WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: AstraAgentApp()));
+    await tester.pump(const Duration(milliseconds: 1200));
     await tester.pumpAndSettle();
 
-    expect(find.text('AstraAgent'), findsOneWidget);
+    expect(find.text('Astra Code Agent'), findsOneWidget);
 
     final homeList = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(
@@ -29,6 +30,7 @@ void main() {
 
   testWidgets('settings opens from home', (WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: AstraAgentApp()));
+    await tester.pump(const Duration(milliseconds: 1200));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Settings'));
