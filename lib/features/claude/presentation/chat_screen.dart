@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../app/theme/app_theme.dart';
 import '../../../app/theme/app_panel.dart';
+import '../../../app/theme/code_syntax.dart';
 import '../../bridge/data/bridge_channel.dart';
 import '../../bridge/presentation/bridge_controller.dart';
 import '../../editor/workspace_folder_picker.dart';
@@ -48,6 +49,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _sawStreamText = false;
   bool _agyStarted = false;
   bool _loadingModels = false;
+  int? _assistantDraftIndex;
+  final Map<String, int> _toolMessageIndices = {};
   String? _error;
 
   @override
@@ -131,12 +134,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  Future<void> _selectWorkspace(String? path) async {
-    if (path == null) return;
-    setState(() => _workspace = path);
-    await _rememberWorkspace(path);
-  }
-
   Future<void> _rememberWorkspace(String path) async {
     try {
       final bridge = ref.read(bridgeServiceProvider);
@@ -215,6 +212,208 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         setState(() => _error = 'Workspace could not be added: $error');
       }
     }
+  }
+
+  Future<void> _openSetup() async {
+    if (_sending || _sessionId != null) return;
+    var selectedAgent = _agent;
+    var selectedWorkspace = _workspace;
+    var selectedModel = _selectedModel;
+    var loadingModels = _loadingModels;
+
+    final selection = await showModalBottomSheet<_ChatSetupSelection>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          Future<void> loadModels() async {
+            if (loadingModels) return;
+            setSheetState(() => loadingModels = true);
+            await _loadModels();
+            if (!sheetContext.mounted) return;
+            setSheetState(() {
+              loadingModels = false;
+              selectedModel = _selectedModel;
+            });
+          }
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              8,
+              20,
+              20 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Chat setup',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Choose the agent and workspace for this conversation.',
+                    style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 18),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: selectedAgent,
+                    decoration: const InputDecoration(
+                      labelText: 'Agent',
+                      prefixIcon: Icon(Icons.auto_awesome_outlined),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Claude Code',
+                        child: Text('Claude Code'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Antigravity',
+                        child: Text('Antigravity'),
+                      ),
+                    ],
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      setSheetState(() {
+                        selectedAgent = value;
+                        selectedModel = value == 'Antigravity'
+                            ? _selectedModel
+                            : null;
+                      });
+                      if (value == 'Antigravity' && _models.isEmpty) {
+                        await loadModels();
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _loadingWorkspaces
+                      ? const LinearProgressIndicator()
+                      : DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: selectedWorkspace,
+                          decoration: InputDecoration(
+                            labelText: 'Workspace',
+                            prefixIcon: const Icon(Icons.folder_open_outlined),
+                            suffixIcon: IconButton(
+                              tooltip: 'Add workspace folder',
+                              onPressed: () async {
+                                await _addWorkspace();
+                                if (!sheetContext.mounted) return;
+                                setSheetState(
+                                  () => selectedWorkspace = _workspace,
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.create_new_folder_outlined,
+                              ),
+                            ),
+                          ),
+                          items: _workspaces
+                              .map(
+                                (item) => DropdownMenuItem(
+                                  value: item.path,
+                                  child: Text(
+                                    item.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) =>
+                              setSheetState(() => selectedWorkspace = value),
+                        ),
+                  if (selectedAgent == 'Antigravity') ...[
+                    const SizedBox(height: 12),
+                    if (loadingModels || _loadingModels)
+                      const LinearProgressIndicator()
+                    else if (_models.isEmpty)
+                      OutlinedButton.icon(
+                        onPressed: loadModels,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Load Antigravity models'),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue:
+                            _models.any((model) => model.id == selectedModel)
+                            ? selectedModel
+                            : _models.first.id,
+                        decoration: const InputDecoration(
+                          labelText: 'Antigravity model',
+                          prefixIcon: Icon(Icons.memory_outlined),
+                        ),
+                        items: _models
+                            .map(
+                              (model) => DropdownMenuItem(
+                                value: model.id,
+                                child: Text(
+                                  model.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) =>
+                            setSheetState(() => selectedModel = value),
+                      ),
+                  ],
+                  if (!ref.read(bridgeControllerProvider).isRunning) ...[
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Start the bridge from Home before chatting.',
+                      style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed:
+                          selectedWorkspace == null ||
+                              (selectedAgent == 'Antigravity' &&
+                                  selectedModel == null)
+                          ? null
+                          : () => Navigator.pop(
+                              context,
+                              _ChatSetupSelection(
+                                agent: selectedAgent,
+                                workspace: selectedWorkspace!,
+                                model: selectedAgent == 'Antigravity'
+                                    ? selectedModel
+                                    : null,
+                              ),
+                            ),
+                      icon: const Icon(Icons.check),
+                      label: const Text('Apply setup'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (selection == null || !mounted) return;
+
+    setState(() {
+      _agent = selection.agent;
+      _workspace = selection.workspace;
+      _selectedModel = selection.model;
+      if (selection.agent != 'Antigravity') _models = [];
+      _error = null;
+    });
+    if (_agent == 'Antigravity' && _models.isEmpty) {
+      unawaited(_loadModels());
+    }
+    await _rememberWorkspace(selection.workspace);
   }
 
   Future<void> _loadHistory() async {
@@ -417,19 +616,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _scrollToBottom();
   }
 
-  void _selectAgent(String? value) {
-    final next = value ?? 'Claude Code';
-    setState(() {
-      _agent = next;
-      _models = [];
-      _selectedModel = null;
-      _error = null;
-    });
-    if (next == 'Antigravity') unawaited(_loadModels());
-  }
-
   Future<void> _loadModels() async {
-    if (_loadingModels) return;
+    while (_loadingModels && mounted) {
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+    }
+    if (!mounted) return;
     setState(() => _loadingModels = true);
     try {
       final bridge = ref.read(bridgeServiceProvider);
@@ -505,6 +696,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _agyTextByStep.clear();
       _messages.add(_ChatMessage(text: text, isUser: true));
       _messages.add(_ChatMessage(text: '', isUser: false));
+      _assistantDraftIndex = _messages.length - 1;
+      _toolMessageIndices.clear();
       _prompt.clear();
     });
     _agentProgress = 'Starting $_agent…';
@@ -601,7 +794,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         return;
       }
       if (data['type'] == 'done') {
-        setState(() => _sending = false);
+        setState(() {
+          _sending = false;
+          _assistantDraftIndex = null;
+        });
         _stopProgressTimer();
         _flushHistorySave();
         return;
@@ -632,32 +828,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
       final event = data['data'] as Map<String, dynamic>;
       final eventType = event['type']?.toString();
+      if (eventType == 'assistant') _recordClaudeToolUses(event);
+      if (eventType == 'user') _recordClaudeToolResults(event);
       final addition = _assistantText(event);
       if (eventType == 'result') {
         setState(() {
           _sending = false;
+          final draftIndex = _assistantDraftIndex;
           if (!_sawStreamText &&
-              _messages.isNotEmpty &&
-              !_messages.last.isUser &&
-              _messages.last.text.isEmpty) {
-            _messages[_messages.length - 1] = _messages.last.copyWith(
+              addition.isNotEmpty &&
+              draftIndex != null &&
+              draftIndex < _messages.length) {
+            _messages[draftIndex] = _messages[draftIndex].copyWith(
               text: addition,
             );
           }
+          _assistantDraftIndex = null;
         });
         _stopProgressTimer();
         _flushHistorySave();
         _scrollToBottom();
         return;
       }
-      if (addition.isEmpty) return;
+      if (addition.isEmpty) {
+        if (eventType == 'assistant' || eventType == 'user') {
+          _scheduleHistorySave();
+          _scrollToBottom();
+        }
+        return;
+      }
       setState(() {
         _agentProgress = 'Receiving response…';
-        if (_messages.isNotEmpty && !_messages.last.isUser) {
+        final draftIndex = _assistantDraftIndex;
+        if (draftIndex != null && draftIndex < _messages.length) {
           if (eventType == 'stream_event') _sawStreamText = true;
           if (eventType == 'assistant' && _sawStreamText) return;
-          _messages[_messages.length - 1] = _messages.last.copyWith(
-            text: _messages.last.text + addition,
+          _messages[draftIndex] = _messages[draftIndex].copyWith(
+            text: _messages[draftIndex].text + addition,
           );
         }
       });
@@ -708,6 +915,71 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
     if (type == 'result') return event['result']?.toString() ?? '';
     return '';
+  }
+
+  void _recordClaudeToolUses(Map<String, dynamic> event) {
+    final message = event['message'];
+    final content = message is Map ? message['content'] : null;
+    if (content is! List) return;
+    var changed = false;
+    for (final part in content.whereType<Map>()) {
+      if (part['type'] != 'tool_use') continue;
+      final id = part['id']?.toString();
+      if (id == null || _toolMessageIndices.containsKey(id)) continue;
+      final input = part['input'];
+      final inputMap = input is Map ? input : const {};
+      final command =
+          inputMap['command']?.toString() ??
+          inputMap['cmd']?.toString() ??
+          (input is String
+              ? input
+              : input == null
+              ? ''
+              : const JsonEncoder.withIndent('  ').convert(input));
+      final index = _messages.length;
+      _toolMessageIndices[id] = index;
+      _messages.add(
+        _ChatMessage(
+          text: '',
+          isUser: false,
+          isTool: true,
+          toolName: part['name']?.toString() ?? 'Tool',
+          command: command,
+          toolRunning: true,
+        ),
+      );
+      changed = true;
+    }
+    if (changed && mounted) setState(() {});
+  }
+
+  void _recordClaudeToolResults(Map<String, dynamic> event) {
+    final message = event['message'];
+    final content = message is Map ? message['content'] : null;
+    if (content is! List) return;
+    var changed = false;
+    for (final part in content.whereType<Map>()) {
+      if (part['type'] != 'tool_result') continue;
+      final index = _toolMessageIndices[part['tool_use_id']?.toString()];
+      if (index == null || index >= _messages.length) continue;
+      final raw = part['content'];
+      final output = raw is String
+          ? raw
+          : raw is List
+          ? raw
+                .whereType<Map>()
+                .map((item) => item['text']?.toString() ?? '')
+                .where((s) => s.isNotEmpty)
+                .join('\n')
+          : raw?.toString() ?? '';
+      _messages[index] = _messages[index].copyWith(
+        text: output,
+        toolRunning: false,
+        toolFailed: part['is_error'] == true,
+      );
+      changed = true;
+    }
+    if (changed && mounted) setState(() {});
   }
 
   void _consumeAgyUpdate(Object? raw) {
@@ -817,8 +1089,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       return;
     }
     setState(() {
-      if (_messages.isNotEmpty && !_messages.last.isUser) {
-        _messages[_messages.length - 1] = _messages.last.copyWith(text: text);
+      final draftIndex = _assistantDraftIndex;
+      if (draftIndex != null && draftIndex < _messages.length) {
+        _messages[draftIndex] = _messages[draftIndex].copyWith(text: text);
       }
     });
     _scheduleHistorySave();
@@ -1083,139 +1356,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         body: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: AppPanel(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                child: Column(
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.tune_rounded,
-                          color: AppTheme.cyan,
-                          size: 17,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'SESSION SETUP',
-                          style: TextStyle(
-                            color: AppTheme.muted,
-                            fontSize: 10,
-                            letterSpacing: 1.1,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      initialValue: _agent,
-                      decoration: const InputDecoration(
-                        labelText: 'Agent',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'Claude Code',
-                          child: Text('Claude Code'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Antigravity',
-                          child: Text('Antigravity'),
-                        ),
-                      ],
-                      onChanged: _sending || _sessionId != null
-                          ? null
-                          : _selectAgent,
-                    ),
-                    const SizedBox(height: 8),
-                    _loadingWorkspaces
-                        ? const LinearProgressIndicator()
-                        : DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            initialValue: _workspace,
-                            decoration: InputDecoration(
-                              labelText: 'Workspace',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                              suffixIcon: IconButton(
-                                tooltip: 'Add workspace folder',
-                                onPressed: _sending || _sessionId != null
-                                    ? null
-                                    : _addWorkspace,
-                                icon: const Icon(
-                                  Icons.create_new_folder_outlined,
-                                  size: 18,
-                                ),
-                              ),
-                            ),
-                            items: _workspaces
-                                .map(
-                                  (item) => DropdownMenuItem(
-                                    value: item.path,
-                                    child: Text(
-                                      item.name,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: _sending || _sessionId != null
-                                ? null
-                                : _selectWorkspace,
-                          ),
-                    if (_agent == 'Antigravity') ...[
-                      const SizedBox(height: 8),
-                      _loadingModels
-                          ? const LinearProgressIndicator()
-                          : DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              initialValue: _selectedModel,
-                              decoration: InputDecoration(
-                                labelText: 'Antigravity model',
-                                border: const OutlineInputBorder(),
-                                isDense: true,
-                                suffixIcon: IconButton(
-                                  tooltip: 'Refresh models',
-                                  onPressed:
-                                      _sessionId != null || _loadingModels
-                                      ? null
-                                      : _loadModels,
-                                  icon: const Icon(Icons.refresh, size: 18),
-                                ),
-                              ),
-                              items: _models
-                                  .map(
-                                    (model) => DropdownMenuItem(
-                                      value: model.id,
-                                      child: Text(
-                                        model.name,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: _sending || _sessionId != null
-                                  ? null
-                                  : (value) =>
-                                        setState(() => _selectedModel = value),
-                            ),
-                    ],
-                    if (!bridge.isRunning)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'Start the bridge from Home before chatting.',
-                          style: const TextStyle(
-                            color: AppTheme.muted,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              child: _ChatSetupCard(
+                agent: _agent,
+                workspace: _workspaces
+                    .where((workspace) => workspace.path == _workspace)
+                    .map((workspace) => workspace.name)
+                    .firstOrNull,
+                model: _models
+                    .where((model) => model.id == _selectedModel)
+                    .map((model) => model.name)
+                    .firstOrNull,
+                loading: _loadingWorkspaces || _loadingModels,
+                locked: _sending || _sessionId != null,
+                bridgeOnline: bridge.isRunning,
+                onTap: _sending || _sessionId != null ? null : _openSetup,
               ),
             ),
             if (_error != null)
@@ -1290,41 +1445,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   ),
                   if (_sending)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const LinearProgressIndicator(minHeight: 2),
-                          const SizedBox(height: 7),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.auto_awesome,
-                                size: 16,
-                                color: AppTheme.accent,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _agentProgress,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          border: Border.all(color: AppTheme.outline),
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.auto_awesome,
+                                  size: 16,
+                                  color: AppTheme.accent,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _agentProgress,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.muted,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  _elapsedLabel(),
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: AppTheme.muted,
                                   ),
                                 ),
+                              ],
+                            ),
+                            const SizedBox(height: 7),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: const LinearProgressIndicator(
+                                minHeight: 3,
                               ),
-                              Text(
-                                _elapsedLabel(),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.muted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
@@ -1333,7 +1504,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             SafeArea(
               top: false,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                padding: EdgeInsets.fromLTRB(12, 8, 12, 6),
                 decoration: const BoxDecoration(
                   color: AppTheme.surface,
                   border: Border(top: BorderSide(color: AppTheme.outline)),
@@ -1345,7 +1516,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       child: TextField(
                         controller: _prompt,
                         minLines: 1,
-                        maxLines: 5,
+                        maxLines: MediaQuery.viewInsetsOf(context).bottom > 0
+                            ? 3
+                            : 5,
                         decoration: InputDecoration(
                           hintText: _agent == 'Antigravity'
                               ? 'Message Antigravity about this workspace'
@@ -1375,6 +1548,118 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       ),
     );
   }
+}
+
+class _ChatSetupCard extends StatelessWidget {
+  const _ChatSetupCard({
+    required this.agent,
+    required this.workspace,
+    required this.model,
+    required this.loading,
+    required this.locked,
+    required this.bridgeOnline,
+    required this.onTap,
+  });
+
+  final String agent;
+  final String? workspace;
+  final String? model;
+  final bool loading;
+  final bool locked;
+  final bool bridgeOnline;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppPanel(
+      padding: EdgeInsets.zero,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentAlt.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    agent == 'Antigravity'
+                        ? Icons.auto_awesome
+                        : Icons.terminal,
+                    color: AppTheme.cyan,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$agent  ·  ${workspace ?? 'Choose workspace'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        loading
+                            ? 'Loading setup…'
+                            : !bridgeOnline
+                            ? 'Bridge offline · start from Home'
+                            : agent == 'Antigravity'
+                            ? model ?? 'Choose an Antigravity model'
+                            : locked
+                            ? 'Active conversation'
+                            : 'Tap to change agent, workspace, or model',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: !bridgeOnline
+                              ? AppTheme.accent
+                              : AppTheme.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  locked ? Icons.lock_outline : Icons.tune_rounded,
+                  color: AppTheme.muted,
+                  size: 19,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatSetupSelection {
+  const _ChatSetupSelection({
+    required this.agent,
+    required this.workspace,
+    this.model,
+  });
+
+  final String agent;
+  final String workspace;
+  final String? model;
 }
 
 class _Workspace {
@@ -1556,11 +1841,32 @@ class _AgyInteractionCardState extends State<_AgyInteractionCard> {
 }
 
 class _ChatMessage {
-  const _ChatMessage({required this.text, required this.isUser});
+  const _ChatMessage({
+    required this.text,
+    required this.isUser,
+    this.isTool = false,
+    this.toolName,
+    this.command,
+    this.toolRunning = false,
+    this.toolFailed = false,
+  });
   final String text;
   final bool isUser;
-  _ChatMessage copyWith({String? text}) =>
-      _ChatMessage(text: text ?? this.text, isUser: isUser);
+  final bool isTool;
+  final String? toolName;
+  final String? command;
+  final bool toolRunning;
+  final bool toolFailed;
+  _ChatMessage copyWith({String? text, bool? toolRunning, bool? toolFailed}) =>
+      _ChatMessage(
+        text: text ?? this.text,
+        isUser: isUser,
+        isTool: isTool,
+        toolName: toolName,
+        command: command,
+        toolRunning: toolRunning ?? this.toolRunning,
+        toolFailed: toolFailed ?? this.toolFailed,
+      );
 }
 
 class _SavedConversation {
@@ -1590,7 +1896,17 @@ class _SavedConversation {
     'workspace': workspace,
     'updatedAt': updatedAt.toIso8601String(),
     'messages': messages
-        .map((message) => {'text': message.text, 'isUser': message.isUser})
+        .map(
+          (message) => {
+            'text': message.text,
+            'isUser': message.isUser,
+            'isTool': message.isTool,
+            'toolName': message.toolName,
+            'command': message.command,
+            'toolRunning': message.toolRunning,
+            'toolFailed': message.toolFailed,
+          },
+        )
         .toList(),
   };
 
@@ -1603,6 +1919,11 @@ class _SavedConversation {
                 (message) => _ChatMessage(
                   text: message['text']?.toString() ?? '',
                   isUser: message['isUser'] == true,
+                  isTool: message['isTool'] == true,
+                  toolName: message['toolName']?.toString(),
+                  command: message['command']?.toString(),
+                  toolRunning: message['toolRunning'] == true,
+                  toolFailed: message['toolFailed'] == true,
                 ),
               )
               .toList()
@@ -1627,7 +1948,10 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!message.isUser && message.text.isEmpty) return const SizedBox.shrink();
+    if (!message.isUser && !message.isTool && message.text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (message.isTool) return _ToolActivityCard(message: message);
     final isUser = message.isUser;
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -1680,10 +2004,157 @@ class _MessageBubble extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 7),
-            SelectableText(message.text),
+            _AssistantBody(text: message.text),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ToolActivityCard extends StatelessWidget {
+  const _ToolActivityCard({required this.message});
+  final _ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = message.toolFailed
+        ? Colors.redAccent
+        : message.toolRunning
+        ? AppTheme.cyan
+        : Colors.greenAccent;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: statusColor.withValues(alpha: .42)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.terminal, size: 16, color: statusColor),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  message.toolName ?? 'Tool',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              if (message.toolRunning)
+                SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.7,
+                    color: statusColor,
+                  ),
+                )
+              else
+                Icon(
+                  message.toolFailed
+                      ? Icons.error_outline
+                      : Icons.check_circle_outline,
+                  size: 15,
+                  color: statusColor,
+                ),
+              const SizedBox(width: 5),
+              Text(
+                message.toolRunning
+                    ? 'RUNNING'
+                    : message.toolFailed
+                    ? 'FAILED'
+                    : 'DONE',
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .5,
+                ),
+              ),
+            ],
+          ),
+          if ((message.command ?? '').isNotEmpty) ...[
+            const SizedBox(height: 9),
+            _CodeBlock(code: message.command!, language: 'shell'),
+          ],
+          if (message.text.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _CodeBlock(code: message.text, language: 'plain'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CodeBlock extends StatelessWidget {
+  const _CodeBlock({required this.code, required this.language});
+  final String code;
+  final String language;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: const Color(0xFF10121A),
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: SelectableText.rich(
+      TextSpan(
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 12,
+          height: 1.5,
+          color: CodeSyntax.foreground,
+        ),
+        children: CodeSyntax.spans(code, language: language),
+      ),
+    ),
+  );
+}
+
+class _AssistantBody extends StatelessWidget {
+  const _AssistantBody({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) {
+    final matches = RegExp(
+      r'(?:^|\n\n)Command: ([^\n]+)(?:\nOutput:\n([\s\S]*?))?(?=\n\nCommand: |$)',
+    ).allMatches(text).toList();
+    if (matches.isEmpty) return SelectableText(text);
+    final children = <Widget>[];
+    var cursor = 0;
+    for (final match in matches) {
+      if (match.start > cursor) {
+        final prose = text.substring(cursor, match.start).trim();
+        if (prose.isNotEmpty) {
+          children.add(SelectableText(prose));
+          children.add(const SizedBox(height: 8));
+        }
+      }
+      children.add(_CodeBlock(code: match.group(1)!, language: 'shell'));
+      final output = match.group(2)?.trim();
+      if (output != null && output.isNotEmpty) {
+        children.add(const SizedBox(height: 7));
+        children.add(_CodeBlock(code: output, language: 'plain'));
+      }
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      final prose = text.substring(cursor).trim();
+      if (prose.isNotEmpty) children.add(SelectableText(prose));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
     );
   }
 }

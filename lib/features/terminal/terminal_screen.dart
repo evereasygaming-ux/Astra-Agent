@@ -12,28 +12,29 @@ import 'package:xterm/xterm.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../app/theme/app_panel.dart';
+import '../../../app/theme/code_syntax.dart';
 import '../bridge/presentation/bridge_controller.dart';
 
 const _astraTerminalTheme = TerminalTheme(
   cursor: AppTheme.cyan,
   selection: Color(0x88586BFF),
-  foreground: Color(0xFFE2E4F0),
+  foreground: CodeSyntax.foreground,
   background: Color(0xFF090A12),
   black: Color(0xFF090A12),
   red: Color(0xFFFF657A),
-  green: Color(0xFF47D7A1),
-  yellow: Color(0xFFFFD166),
-  blue: Color(0xFF6D8BFF),
-  magenta: Color(0xFFF12DFF),
-  cyan: Color(0xFF20DFFF),
-  white: Color(0xFFE2E4F0),
-  brightBlack: Color(0xFF77788D),
+  green: CodeSyntax.string,
+  yellow: CodeSyntax.number,
+  blue: CodeSyntax.function,
+  magenta: CodeSyntax.keyword,
+  cyan: CodeSyntax.type,
+  white: CodeSyntax.foreground,
+  brightBlack: CodeSyntax.comment,
   brightRed: Color(0xFFFF8292),
-  brightGreen: Color(0xFF74E7B8),
-  brightYellow: Color(0xFFFFDE91),
-  brightBlue: Color(0xFF8BA2FF),
-  brightMagenta: Color(0xFFF66BFF),
-  brightCyan: Color(0xFF62E8FF),
+  brightGreen: Color(0xFFB0F1C4),
+  brightYellow: Color(0xFFFFD7A1),
+  brightBlue: Color(0xFFA8BCFF),
+  brightMagenta: Color(0xFFDCBEFF),
+  brightCyan: Color(0xFF9CEBFA),
   brightWhite: Colors.white,
   searchHitBackground: Color(0xFFFFFF2B),
   searchHitBackgroundCurrent: Color(0xFF31FF26),

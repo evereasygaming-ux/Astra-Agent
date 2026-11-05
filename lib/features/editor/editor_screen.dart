@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../app/theme/code_syntax.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../app/theme/app_panel.dart';
 import '../bridge/data/bridge_service.dart';
@@ -665,7 +666,7 @@ class _TextFileEditor extends StatefulWidget {
 
 class _TextFileEditorState extends State<_TextFileEditor> {
   static const _maxFileBytes = 2 * 1024 * 1024;
-  final _controller = TextEditingController();
+  late final SyntaxTextController _controller;
   String? _error;
   bool _loading = true;
   bool _saving = false;
@@ -674,6 +675,7 @@ class _TextFileEditorState extends State<_TextFileEditor> {
   @override
   void initState() {
     super.initState();
+    _controller = SyntaxTextController(language: languageForPath(widget.path));
     _controller.addListener(_onChanged);
     unawaited(_load());
   }
@@ -929,6 +931,37 @@ class _TextFileEditorState extends State<_TextFileEditor> {
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.all(16),
                         ),
+                      ),
+                    ),
+                    Container(
+                      height: 32,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: const BoxDecoration(
+                        color: AppTheme.surface,
+                        border: Border(
+                          top: BorderSide(color: AppTheme.outline),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            languageForPath(widget.path).toUpperCase(),
+                            style: const TextStyle(
+                              color: AppTheme.cyan,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${_controller.text.split('\n').length} lines · ${_controller.text.length} chars',
+                            style: const TextStyle(
+                              color: AppTheme.muted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

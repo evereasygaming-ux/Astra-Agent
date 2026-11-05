@@ -219,46 +219,15 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.outline),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.accent.withValues(alpha: 0.18),
-                blurRadius: 22,
-              ),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
+        SizedBox(
+          width: 178,
+          height: 72,
           child: Image.asset(
-            'assets/branding/astra_code_icon.png',
-            fit: BoxFit.cover,
+            'assets/branding/astra_code_home_logo.png',
+            fit: BoxFit.contain,
           ),
         ),
-        const SizedBox(width: 12),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                AppInfo.name,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              Text(
-                AppInfo.tagline,
-                style: TextStyle(color: AppTheme.muted, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
+        const Spacer(),
         IconButton(
           onPressed: onSettings,
           tooltip: 'Settings',

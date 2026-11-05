@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../core/constants/app_info.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 
@@ -96,52 +95,16 @@ class _BrandLoadingScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 132,
-                height: 132,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(34),
-                  border: Border.all(color: AppTheme.outline),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.accent.withValues(alpha: 0.2),
-                      blurRadius: 42,
-                      spreadRadius: 2,
-                    ),
-                    BoxShadow(
-                      color: AppTheme.accentAlt.withValues(alpha: 0.16),
-                      blurRadius: 54,
-                      offset: const Offset(12, 14),
-                    ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
                 child: Image.asset(
-                  'assets/branding/astra_code_icon.png',
-                  fit: BoxFit.cover,
+                  'assets/branding/astra_code_splash.png',
+                  width: MediaQuery.sizeOf(context).width * 0.82,
+                  height: MediaQuery.sizeOf(context).width * 0.82,
+                  fit: BoxFit.contain,
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                AppInfo.name,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                AppInfo.tagline,
-                style: TextStyle(
-                  color: AppTheme.muted,
-                  fontSize: 12,
-                  letterSpacing: 1,
-                ),
-              ),
-              const SizedBox(height: 38),
               const SizedBox(
                 width: 22,
                 height: 22,
