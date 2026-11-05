@@ -106,7 +106,7 @@ class BridgeService {
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw BridgeException(
         'Bridge rejected the token. Use the same --token value in Termux '
-        'and in AstraAgent Settings.',
+        'and in Astra Code Agent Settings.',
       );
     }
     if (response.statusCode != 200) {

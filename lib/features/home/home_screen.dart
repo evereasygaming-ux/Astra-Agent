@@ -220,22 +220,23 @@ class _Header extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 44,
-          height: 44,
+          width: 50,
+          height: 50,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppTheme.accent, AppTheme.accentAlt],
-            ),
-            borderRadius: BorderRadius.circular(14),
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.outline),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.accent.withValues(alpha: 0.18),
+                blurRadius: 22,
+              ),
+            ],
           ),
-          alignment: Alignment.center,
-          child: const Text(
-            'A',
-            style: TextStyle(
-              color: Color(0xFF07101A),
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-            ),
+          clipBehavior: Clip.antiAlias,
+          child: Image.asset(
+            'assets/branding/astra_code_icon.png',
+            fit: BoxFit.cover,
           ),
         ),
         const SizedBox(width: 12),
@@ -246,9 +247,9 @@ class _Header extends StatelessWidget {
               Text(
                 AppInfo.name,
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
+                  letterSpacing: -0.3,
                 ),
               ),
               Text(
@@ -367,57 +368,138 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        gradient: LinearGradient(
+        border: Border.all(color: AppTheme.outline),
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppTheme.accent.withValues(alpha: 0.18),
-            AppTheme.accentAlt.withValues(alpha: 0.14),
-          ],
+          colors: [Color(0xFF151322), Color(0xFF0E1222), Color(0xFF0A0B14)],
         ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accentAlt.withValues(alpha: 0.1),
+            blurRadius: 30,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: const Text(
-              'PHASE 1 • BRIDGE',
-              style: TextStyle(
-                fontSize: 10,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.accent,
+          Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Image.asset(
+                  'assets/branding/astra_code_icon.png',
+                  fit: BoxFit.cover,
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'YOUR CREATIVE WORKSPACE',
+                      style: TextStyle(
+                        fontSize: 9,
+                        letterSpacing: 1.25,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.cyan.withValues(alpha: 0.95),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    const Text(
+                      'Ready when you are',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppTheme.cyan,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: AppTheme.cyan, blurRadius: 10)],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
           const Text(
-            'Agentic coding,\nright on your phone.',
+            'Build something\nextraordinary.',
             style: TextStyle(
-              fontSize: 26,
-              height: 1.2,
+              fontSize: 27,
+              height: 1.12,
               fontWeight: FontWeight.w700,
+              letterSpacing: -0.7,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 11),
           Text(
-            'Chat with coding agents, run a real Linux shell, edit files '
-            'and preview web apps without leaving Android.',
+            'Your coding agents, Linux terminal, editor and live preview — all in one workspace.',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.72),
+              color: Colors.white.withValues(alpha: 0.68),
               height: 1.5,
+              fontSize: 13,
             ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              _HeroTag(label: 'EXPLORE', color: AppTheme.accent),
+              const SizedBox(width: 7),
+              _HeroTag(label: 'BUILD', color: AppTheme.accentAlt),
+              const SizedBox(width: 7),
+              _HeroTag(label: 'CREATE', color: AppTheme.cyan),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HeroTag extends StatelessWidget {
+  const _HeroTag({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: color.withValues(alpha: 0.27)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          letterSpacing: 0.7,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
       ),
     );
   }

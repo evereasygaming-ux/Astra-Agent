@@ -95,7 +95,7 @@ class SettingsScreen extends ConsumerWidget {
                 RadioListTile<BridgeMode>(
                   value: BridgeMode.embedded,
                   title: Text('Embedded'),
-                  subtitle: Text('Bridge bundled inside AstraAgent'),
+                  subtitle: Text('Bridge bundled inside Astra Code Agent'),
                 ),
                 RadioListTile<BridgeMode>(
                   value: BridgeMode.external,
@@ -280,7 +280,7 @@ class SettingsScreen extends ConsumerWidget {
                 title: 'Mode',
                 subtitle: config.isExternal
                     ? 'Bridge running in Debian proot'
-                    : 'Bridge bundled inside AstraAgent',
+                    : 'Bridge bundled inside Astra Code Agent',
                 trailing: config.isExternal ? 'Debian proot' : 'Embedded',
                 onTap: () => _editMode(context, ref, config),
               ),
@@ -469,7 +469,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             child: const Text(
-              'AstraAgent uses its own package id so it installs beside '
+              'Astra Code Agent uses its own package id so it installs beside '
               'Termux. Google Play distribution is not planned while '
               'targetSdk stays at 28.',
               style: TextStyle(fontSize: 12, height: 1.5),

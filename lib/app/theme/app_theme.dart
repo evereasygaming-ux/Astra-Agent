@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color background = Color(0xFF080B14);
-  static const Color surface = Color(0xFF111726);
-  static const Color surfaceHigh = Color(0xFF182033);
-  static const Color accent = Color(0xFF54E6C0);
-  static const Color accentAlt = Color(0xFF8C7BFF);
-  static const Color muted = Color(0xFF8C95AA);
+  static const Color background = Color(0xFF070711);
+  static const Color surface = Color(0xFF10101D);
+  static const Color surfaceHigh = Color(0xFF19192A);
+  static const Color accent = Color(0xFFF12DFF);
+  static const Color accentAlt = Color(0xFF586BFF);
+  static const Color cyan = Color(0xFF20DFFF);
+  static const Color muted = Color(0xFF9696AE);
+  static const Color outline = Color(0xFF29283C);
 
   static ThemeData dark() {
     final scheme =
@@ -15,16 +17,26 @@ class AppTheme {
           brightness: Brightness.dark,
         ).copyWith(
           primary: accent,
-          onPrimary: const Color(0xFF00382C),
+          onPrimary: Colors.white,
           secondary: accentAlt,
+          tertiary: cyan,
+          onSecondary: Colors.white,
           surface: surface,
           onSurface: Colors.white,
+          outline: outline,
+          surfaceContainerHighest: surfaceHigh,
         );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: background,
+      canvasColor: background,
+      cardColor: surface,
+      textTheme: ThemeData.dark().textTheme.apply(
+        bodyColor: Colors.white,
+        displayColor: Colors.white,
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -36,12 +48,52 @@ class AppTheme {
         backgroundColor: surfaceHigh,
         contentTextStyle: TextStyle(color: Colors.white),
       ),
-      dividerTheme: DividerThemeData(
-        color: Colors.white.withValues(alpha: 0.08),
-      ),
+      dividerTheme: DividerThemeData(color: outline),
       listTileTheme: const ListTileThemeData(
         iconColor: accent,
         textColor: Colors.white,
+      ),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: outline),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: outline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: outline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: cyan, width: 1.4),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: accentAlt,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: outline),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
       ),
     );
   }

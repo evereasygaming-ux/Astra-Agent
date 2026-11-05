@@ -112,7 +112,7 @@ class _AgyScreenState extends ConsumerState<AgyScreen>
           const SizedBox(height: 20),
           const Text(
             'AGY is the Antigravity (Gemini) agent. In Termux mode it runs '
-            'inside your Termux environment and AstraAgent talks to the '
+            'inside your Termux environment and Astra Code Agent talks to the '
             'bridge over localhost.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.5),
           ),
@@ -148,7 +148,7 @@ class _TermuxPanel extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'AGY is managed by Termux. AstraAgent only connects to the bridge '
+            'AGY is managed by Termux. Astra Code Agent only connects to the bridge '
             'at ${config.trimmedUrl}; sign-in and updates happen inside Debian proot.',
             style: const TextStyle(
               color: AppTheme.muted,
@@ -189,7 +189,7 @@ class _TermuxRequiredPanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'AGY cannot run inside the AstraAgent sandbox without a Linux '
+            'AGY cannot run inside the Astra Code Agent sandbox without a Linux '
             'environment. Switch Settings -> Bridge -> Mode to Termux and run '
             'the bridge from Termux.',
             style: TextStyle(fontSize: 12, height: 1.45),
@@ -207,7 +207,7 @@ class _SetupSteps extends StatelessWidget {
   Widget build(BuildContext context) {
     const steps = [
       'Install Termux from F-Droid (not the Play Store build).',
-      'AstraAgent -> Home -> Set up & launch.',
+      'Astra Code Agent -> Home -> Set up & launch.',
       'Allow the Termux run-command permission and "Allow external apps".',
       'Wait until the bridge shows Online, then sign in with Google.',
     ];

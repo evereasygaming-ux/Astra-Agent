@@ -61,7 +61,7 @@ object ClaudeRuntime {
 
         val script = """
             #!/system/bin/sh
-            # Claude Code launcher written by AstraAgent. Edits are overwritten on app start.
+            # Claude Code launcher written by Astra Code Agent. Edits are overwritten on app start.
             VERSIONS_DIR="${versions.absolutePath}"
             GLIBC_LIB="${lib.absolutePath}"
             LOADER="${loader.absolutePath}"
@@ -77,11 +77,11 @@ object ClaudeRuntime {
                 done
             fi
             if [ -z "${'$'}TARGET" ]; then
-                echo "Claude Code is not installed. Open AstraAgent > Settings > Claude Code and install it." >&2
+                echo "Claude Code is not installed. Open Astra Code Agent > Settings > Claude Code and install it." >&2
                 exit 127
             fi
             if [ ! -x "${'$'}LOADER" ]; then
-                echo "The glibc runtime is missing (${'$'}LOADER). Restart AstraAgent to restore it." >&2
+                echo "The glibc runtime is missing (${'$'}LOADER). Restart Astra Code Agent to restore it." >&2
                 exit 127
             fi
             unset LD_PRELOAD

@@ -1,6 +1,6 @@
 class AppInfo {
-  static const String name = 'AstraAgent';
-  static const String tagline = 'Your pocket agent workspace';
+  static const String name = 'Astra Code Agent';
+  static const String tagline = 'Explore • Build • Create';
   static const String version = '0.1.0';
   static const String packageId = 'com.astra.agent';
   static const int minSdk = 24;

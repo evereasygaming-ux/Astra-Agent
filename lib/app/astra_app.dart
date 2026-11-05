@@ -9,7 +9,7 @@ class AstraAgentApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'AstraAgent',
+      title: 'Astra Code Agent',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       routerConfig: appRouter,

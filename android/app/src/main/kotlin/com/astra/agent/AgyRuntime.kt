@@ -49,16 +49,16 @@ object AgyRuntime {
 
         val script = """
             #!/system/bin/sh
-            # AGY launcher written by AstraAgent. Edits are overwritten on app start.
+            # AGY launcher written by Astra Code Agent. Edits are overwritten on app start.
             REAL="${real.absolutePath}"
             GLIBC_LIB="${lib.absolutePath}"
             LOADER="${loader.absolutePath}"
             if [ ! -f "${'$'}REAL" ]; then
-                echo "AGY daemon is not installed. Open AstraAgent > Settings > AGY and install it." >&2
+                echo "AGY daemon is not installed. Open Astra Code Agent > Settings > AGY and install it." >&2
                 exit 127
             fi
             if [ ! -x "${'$'}LOADER" ]; then
-                echo "The glibc runtime is missing (${'$'}LOADER). Restart AstraAgent to restore it." >&2
+                echo "The glibc runtime is missing (${'$'}LOADER). Restart Astra Code Agent to restore it." >&2
                 exit 127
             fi
             unset LD_PRELOAD
@@ -87,7 +87,7 @@ object AgyRuntime {
         val connection = (URL(UPDATE_URL).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15000
             readTimeout = 15000
-            setRequestProperty("User-Agent", "AstraAgent/Android")
+            setRequestProperty("User-Agent", "AstraCodeAgent/Android")
         }
         try {
             val body = connection.inputStream.bufferedReader().use { it.readText() }
@@ -112,7 +112,7 @@ object AgyRuntime {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 30000
             readTimeout = 120000
-            setRequestProperty("User-Agent", "AstraAgent/Android")
+            setRequestProperty("User-Agent", "AstraCodeAgent/Android")
             instanceFollowRedirects = true
         }
         try {

@@ -1,4 +1,4 @@
-# AstraAgent
+# Astra Code Agent
 
 Agentic AI coding workspace for Android. Built with Flutter, with an embedded
 Go bridge for Claude Code stream-json sessions.
@@ -14,14 +14,14 @@ in-app Claude screen.
 
 Phase 3: Debian proot mode (current). AGY and Claude Code run inside the
 existing Debian proot container managed by Termux. The Go bridge also runs
-inside Debian, and AstraAgent connects to it over `127.0.0.1`.
+inside Debian, and Astra Code Agent connects to it over `127.0.0.1`.
 
 Debian proot mode is the default. To use the embedded Claude bridge instead,
 change the bridge mode in Settings.
 
 ## Debian proot mode
 
-Install Termux, Debian proot, and AstraAgent, then tap `Set up & launch` on the
+Install Termux, Debian proot, and Astra Code Agent, then tap `Set up & launch` on the
 Home screen or in `Settings -> Debian proot automation`. The app enters Debian
 through Termux's `RUN_COMMAND` intent and:
 
@@ -30,7 +30,7 @@ through Termux's `RUN_COMMAND` intent and:
 - creates a Claude launcher wrapper; install Claude Code from its Settings
   screen
 - writes `~/.astra/start-bridge.sh`, starts the bridge inside Debian and connects
-  to it from AstraAgent
+  to it from Astra Code Agent
 
 Two one-time Android permissions are required, both prompted by the app:
 

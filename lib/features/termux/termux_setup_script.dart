@@ -24,7 +24,7 @@ export PATH="$HOME/.local/bin:$PATH"
 mkdir -p "$HOME/.astra" "$HOME/.local/bin"
 LOG="$HOME/.astra/setup.log"
 exec > >(tee -a "$LOG") 2>&1
-echo "=== AstraAgent Debian proot setup ==="
+echo "=== Astra Code Agent Debian proot setup ==="
 
 if [ ! -x /system/bin/linker64 ]; then
   echo "Android linker is not visible inside Debian proot"
@@ -40,7 +40,7 @@ if [ -z "$AGY_BIN" ] || [ ! -x "$AGY_BIN" ]; then
   exit 1
 fi
 
-echo "-> installing the AstraAgent bridge in Debian"
+echo "-> installing the Astra Code Agent bridge in Debian"
 curl -fsSL "http://127.0.0.1:__ASSET_PORT__/agy_ide_bridge" \
   -o "$HOME/.local/bin/agy_ide_bridge.tmp"
 chmod 755 "$HOME/.local/bin/agy_ide_bridge.tmp"
@@ -51,7 +51,7 @@ cat > "$HOME/.local/bin/claude" <<'CLAUDE_EOF'
 VERSIONS="$HOME/.local/share/claude/versions"
 LATEST=$(ls -1 "$VERSIONS" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
 if [ -z "$LATEST" ]; then
-  echo "Claude Code is not installed. Open AstraAgent -> Claude Code and tap Install." >&2
+  echo "Claude Code is not installed. Open Astra Code Agent -> Claude Code and tap Install." >&2
   exit 127
 fi
 exec "$VERSIONS/$LATEST" "$@"
@@ -77,7 +77,7 @@ if [ -f "$PIDFILE" ]; then
   if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null && \
     tr '\0' ' ' <"/proc/$PID/cmdline" 2>/dev/null | grep -qF "$HOME/.local/bin/agy_ide_bridge"; then
     if [ "$1" != "--restart" ]; then
-      echo "AstraAgent bridge is already running (PID $PID)"
+      echo "Astra Code Agent bridge is already running (PID $PID)"
       exit 0
     fi
     kill "$PID" 2>/dev/null || true
@@ -97,7 +97,7 @@ exec "$HOME/.local/bin/agy_ide_bridge" -f \
   --bin "$AGY_BIN" --claude-bin "$HOME/.local/bin/claude" --dir "$HOME" \
 ASTRA_EOF
 chmod 755 "$HOME/.astra/start-bridge.sh"
-echo "=== AstraAgent Debian proot setup finished ==="
+echo "=== Astra Code Agent Debian proot setup finished ==="
 exec "$HOME/.astra/start-bridge.sh" --restart
 ''';
   return template
@@ -107,14 +107,16 @@ exec "$HOME/.astra/start-bridge.sh" --restart
       .replaceAll('__ASSET_PORT__', '$assetPort');
 }
 
-String buildLaunchScript({bool restart = false}) => r'''
+String buildLaunchScript({bool restart = false}) =>
+    r'''
 if [ -x "$HOME/.astra/start-bridge.sh" ]; then
   exec "$HOME/.astra/start-bridge.sh"__RESTART__
 else
-  echo "AstraAgent Debian setup has not run yet."
+  echo "Astra Code Agent Debian setup has not run yet."
   exit 3
 fi
-'''.replaceAll('__RESTART__', restart ? ' --restart' : '');
+'''
+        .replaceAll('__RESTART__', restart ? ' --restart' : '');
 
 String buildBridgeConfigUpdateScript({
   required String token,
@@ -136,7 +138,7 @@ set -e
 export HOME=/root
 export PATH="$HOME/.local/bin:$PATH"
 if [ ! -x "$HOME/.astra/start-bridge.sh" ]; then
-  echo "AstraAgent Debian setup has not run yet. Run Set up & launch first."
+  echo "Astra Code Agent Debian setup has not run yet. Run Set up & launch first."
   exit 3
 fi
 if ! grep -q 'bridge.env' "$HOME/.astra/start-bridge.sh"; then
