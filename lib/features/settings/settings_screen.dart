@@ -250,6 +250,13 @@ class SettingsScreen extends ConsumerWidget {
             title: 'Agents',
             children: [
               _Tile(
+                icon: Icons.extension_outlined,
+                title: 'Plugins & MCP servers',
+                subtitle: 'Install plugins and edit MCP server configuration',
+                trailing: 'Open',
+                onTap: () => context.push('/plugins'),
+              ),
+              _Tile(
                 icon: Icons.smart_toy_outlined,
                 title: 'Claude Code',
                 subtitle: 'CLI runtime, account and sign-in',

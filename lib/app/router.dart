@@ -7,6 +7,7 @@ import '../features/claude/presentation/chat_screen.dart';
 import '../features/editor/editor_screen.dart';
 import '../features/git/git_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/plugins/plugins_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/terminal/terminal_screen.dart';
 
@@ -16,6 +17,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings',
       builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/plugins',
+      builder: (context, state) => const PluginsScreen(),
     ),
     GoRoute(path: '/claude', builder: (context, state) => const ClaudeScreen()),
     GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
