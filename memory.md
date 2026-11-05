@@ -104,9 +104,14 @@
   passed bridge compilation, Flutter analysis/tests, APK build, Android install
   safety checks, and artifact upload. User installed the APK and confirmed the
   terminal works on device.
-- Editor MVP is now in progress: workspace file browsing, text-file editing,
-  save, and unsaved-change confirmation are implemented using existing bridge
-  APIs. Flutter analysis and `git diff --check` pass; device validation pending.
+- Editor MVP is implemented: workspace file browsing, text-file editing, save,
+  and unsaved-change confirmation use existing bridge APIs. Flutter analysis
+  and `git diff --check` passed; the user confirmed on-device that workspace
+  files display, edit, and save successfully.
+- Git workspace MVP is implemented using the existing bridge endpoints: branch
+  status, staged/unstaged/untracked file lists, per-file diff, stage/unstage,
+  stage all, repository initialization, and commit of staged changes. Flutter
+  analysis and `git diff --check` pass; device validation is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

@@ -185,6 +185,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onTap: () => context.push('/editor'),
                 ),
                 _ActionCard(
+                  icon: Icons.account_tree_outlined,
+                  title: 'Git',
+                  subtitle: 'Changes & commits',
+                  onTap: () => context.push('/git'),
+                ),
+                _ActionCard(
                   icon: Icons.public,
                   title: 'Browser',
                   subtitle: 'Localhost preview',
@@ -197,7 +203,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 12),
             _RoadmapCard(
               items: const [
-                'Native terminal, editor and Git',
+                'Git history, branches and remote sync',
                 'Browser preview and MCP plugins',
                 'Project files and code search',
               ],
