@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../app/theme/app_theme.dart';
-import '../../bridge/data/bridge_service.dart';
 import '../../bridge/presentation/bridge_controller.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -55,8 +54,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final response = await http
           .get(await bridge.resolve('/api/projects'), headers: headers)
           .timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200)
+      if (response.statusCode != 200) {
         throw HttpException('HTTP ${response.statusCode}');
+      }
       final decoded = jsonDecode(response.body);
       final raw = decoded is List
           ? decoded
@@ -159,11 +159,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _subscription = socket.listen(
       _onFrame,
       onError: (Object error) {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _sending = false;
             _error = 'Claude connection failed: $error';
           });
+        }
         _socket = null;
       },
       onDone: () {
@@ -192,8 +193,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         return;
       }
       if (data['type'] != 'bridge_line' ||
-          data['data'] is! Map<String, dynamic>)
+          data['data'] is! Map<String, dynamic>) {
         return;
+      }
       final event = data['data'] as Map<String, dynamic>;
       final eventType = event['type']?.toString();
       final addition = _assistantText(event);
@@ -265,12 +267,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients)
+      if (_scroll.hasClients) {
         _scroll.animateTo(
           _scroll.position.maxScrollExtent,
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
         );
+      }
     });
   }
 
@@ -312,7 +315,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _agent,
+                        initialValue: _agent,
                         decoration: const InputDecoration(
                           labelText: 'Agent',
                           border: OutlineInputBorder(),
@@ -341,7 +344,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       child: _loadingWorkspaces
                           ? const LinearProgressIndicator()
                           : DropdownButtonFormField<String>(
-                              value: _workspace,
+                              initialValue: _workspace,
                               decoration: const InputDecoration(
                                 labelText: 'Workspace',
                                 border: OutlineInputBorder(),
