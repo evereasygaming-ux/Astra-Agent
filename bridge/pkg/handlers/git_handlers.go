@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -58,6 +59,58 @@ func (h *Handler) GitStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+// GitHubAuthHandler validates and stores a GitHub personal access token.
+func (h *Handler) GitHubAuthHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		token, err := git.GitHubToken()
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"connected": false})
+			return
+		}
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "Could not read GitHub sign-in state"})
+			return
+		}
+		login, err := git.GitHubLogin()
+		if err != nil {
+			login, _ = git.ValidateGitHubToken(token)
+		}
+		if login == "" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"connected": false, "error": "GitHub account name is unavailable; reconnect your account"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"connected": true, "login": login})
+	case http.MethodPost:
+		var req struct {
+			Token string `json:"token"`
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "A GitHub personal access token is required"})
+			return
+		}
+		login, err := git.ValidateGitHubToken(req.Token)
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{"error": err.Error()})
+			return
+		}
+		if err := git.SaveGitHubToken(req.Token, login); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "Could not store GitHub token securely"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"connected": true, "login": login})
+	case http.MethodDelete:
+		if err := git.ClearGitHubToken(); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "Could not remove GitHub token"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"connected": false})
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func (h *Handler) GitInitHandler(w http.ResponseWriter, r *http.Request) {
@@ -484,9 +537,9 @@ func (h *Handler) GitCommitFileDiffHandler(w http.ResponseWriter, r *http.Reques
 	diffOut, err := git.GetCommitFileDiff(projectDir, hash, file)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"hash": hash,
-			"file": file,
-			"diff": "",
+			"hash":  hash,
+			"file":  file,
+			"diff":  "",
 			"error": err.Error(),
 		})
 		return

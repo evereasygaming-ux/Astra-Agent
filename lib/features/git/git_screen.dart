@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../app/theme/app_theme.dart';
+import '../bridge/data/bridge_channel.dart';
 import '../bridge/presentation/bridge_controller.dart';
 
 class GitScreen extends ConsumerStatefulWidget {
@@ -19,14 +20,18 @@ class _GitScreenState extends ConsumerState<GitScreen> {
   List<_Project> _projects = [];
   String? _projectPath;
   _GitStatus? _status;
+  _GitHubAccount? _githubAccount;
   String? _error;
+  String? _githubError;
   bool _loading = true;
+  bool _loadingGithub = true;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadProjects());
+    unawaited(_loadGithubAccount());
   }
 
   Future<Map<String, dynamic>> _request(
@@ -136,6 +141,71 @@ class _GitScreenState extends ConsumerState<GitScreen> {
       _status = null;
     });
     await _loadStatus();
+  }
+
+  Future<void> _loadGithubAccount() async {
+    try {
+      final result = await _request('GET', '/api/git/github/auth');
+      if (!mounted) return;
+      setState(() {
+        _githubAccount = result['connected'] == true
+            ? _GitHubAccount(result['login']?.toString() ?? '')
+            : null;
+        _githubError = result['error']?.toString();
+        _loadingGithub = false;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _githubError = error.toString();
+          _loadingGithub = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _connectGithub() async {
+    final token = await showDialog<String>(
+      context: context,
+      builder: (context) => const _GitHubTokenDialog(),
+    );
+    if (token == null || token.trim().isEmpty || !mounted) return;
+    setState(() {
+      _busy = true;
+      _githubError = null;
+    });
+    try {
+      final result = await _request(
+        'POST',
+        '/api/git/github/auth',
+        body: {'token': token.trim()},
+      );
+      if (!mounted) return;
+      final account = _GitHubAccount(result['login']?.toString() ?? '');
+      setState(() => _githubAccount = account);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connected to GitHub as @${account.login}')),
+      );
+    } catch (error) {
+      if (mounted) setState(() => _githubError = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _disconnectGithub() async {
+    setState(() {
+      _busy = true;
+      _githubError = null;
+    });
+    try {
+      await _request('DELETE', '/api/git/github/auth');
+      if (mounted) setState(() => _githubAccount = null);
+    } catch (error) {
+      if (mounted) setState(() => _githubError = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _perform(String label, String path, {Object? body}) async {
@@ -271,6 +341,15 @@ class _GitScreenState extends ConsumerState<GitScreen> {
                       ],
                     ),
                   ],
+                  const SizedBox(height: 8),
+                  _GitHubCard(
+                    account: _githubAccount,
+                    loading: _loadingGithub,
+                    busy: _busy,
+                    error: _githubError,
+                    onConnect: _connectGithub,
+                    onDisconnect: _disconnectGithub,
+                  ),
                   const SizedBox(height: 16),
                   if (_loading)
                     const LinearProgressIndicator()
@@ -370,6 +449,165 @@ class _NotRepository extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+class _GitHubCard extends StatelessWidget {
+  const _GitHubCard({
+    required this.account,
+    required this.loading,
+    required this.busy,
+    required this.error,
+    required this.onConnect,
+    required this.onDisconnect,
+  });
+
+  final _GitHubAccount? account;
+  final bool loading;
+  final bool busy;
+  final String? error;
+  final VoidCallback onConnect;
+  final VoidCallback onDisconnect;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.code, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      account == null ? 'GitHub account' : '@${account!.login}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      loading
+                          ? 'Checking connection…'
+                          : account == null
+                          ? 'Connect to use GitHub HTTPS remotes'
+                          : 'Connected',
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (loading)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (account == null)
+                OutlinedButton(
+                  onPressed: busy ? null : onConnect,
+                  child: const Text('Connect'),
+                )
+              else
+                IconButton(
+                  tooltip: 'Disconnect GitHub',
+                  onPressed: busy ? null : onDisconnect,
+                  icon: const Icon(Icons.logout),
+                ),
+            ],
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                error!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+class _GitHubTokenDialog extends StatefulWidget {
+  const _GitHubTokenDialog();
+
+  @override
+  State<_GitHubTokenDialog> createState() => _GitHubTokenDialogState();
+}
+
+class _GitHubTokenDialogState extends State<_GitHubTokenDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Connect GitHub'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Create a fine-grained personal access token for the repositories '
+            'you need. Grant Contents: Read and write, then paste it below. '
+            'Use an HTTPS GitHub remote; SSH remotes do not use this token.',
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => BridgeChannel().openUrl(
+                'https://github.com/settings/personal-access-tokens/new',
+              ),
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: const Text('Create token on GitHub'),
+            ),
+          ),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            obscureText: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(
+              labelText: 'Personal access token',
+              hintText: 'github_pat_…',
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'The token is saved in Debian proot with owner-only file '
+            'permissions. It is not added to the remote URL.',
+            style: TextStyle(fontSize: 12, color: AppTheme.muted),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _controller.text),
+        child: const Text('Connect'),
+      ),
+    ],
   );
 }
 
@@ -569,6 +807,11 @@ class _Project {
     name: (json['name'] ?? '').toString(),
     path: (json['path'] ?? '').toString(),
   );
+}
+
+class _GitHubAccount {
+  const _GitHubAccount(this.login);
+  final String login;
 }
 
 class _GitFile {

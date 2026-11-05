@@ -2,7 +2,11 @@ package git
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"gemini-server/pkg/config"
 	"gemini-server/pkg/models"
@@ -66,6 +71,153 @@ func getEnv() []string {
 	return env
 }
 
+func githubTokenPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", fmt.Errorf("could not locate user home directory")
+	}
+	return filepath.Join(home, ".config", "astraagent", "github-token"), nil
+}
+
+// ValidateGitHubToken checks the token with GitHub and returns the account login.
+func ValidateGitHubToken(token string) (string, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", fmt.Errorf("personal access token is required")
+	}
+	req, err := http.NewRequest(http.MethodGet, "https://api.github.com/user", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	resp, err := (&http.Client{Timeout: 12 * time.Second}).Do(req)
+	if err != nil {
+		return "", fmt.Errorf("could not reach GitHub: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub rejected the token (HTTP %d)", resp.StatusCode)
+	}
+	var user struct {
+		Login string `json:"login"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&user); err != nil || user.Login == "" {
+		return "", fmt.Errorf("GitHub returned an invalid account response")
+	}
+	return user.Login, nil
+}
+
+// SaveGitHubToken stores the token and verified account name outside repositories.
+func SaveGitHubToken(token, login string) error {
+	path, err := githubTokenPath()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create private GitHub credential directory: %w", err)
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		return fmt.Errorf("protect GitHub credential directory: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(strings.TrimSpace(token)+"\n"), 0600); err != nil {
+		return fmt.Errorf("save GitHub token: %w", err)
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		return err
+	}
+	loginPath := filepath.Join(dir, "github-login")
+	if err := os.WriteFile(loginPath, []byte(strings.TrimSpace(login)+"\n"), 0600); err != nil {
+		return fmt.Errorf("save GitHub account name: %w", err)
+	}
+	return os.Chmod(loginPath, 0600)
+}
+
+// GitHubToken returns the stored credential without exposing it to API callers.
+func GitHubToken() (string, error) {
+	path, err := githubTokenPath()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// GitHubLogin returns the account name verified when the token was connected.
+func GitHubLogin() (string, error) {
+	path, err := githubTokenPath()
+	if err != nil {
+		return "", err
+	}
+	login, err := os.ReadFile(filepath.Join(filepath.Dir(path), "github-login"))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(login)), nil
+}
+
+// ClearGitHubToken removes the locally stored GitHub credential.
+func ClearGitHubToken() error {
+	path, err := githubTokenPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	loginPath := filepath.Join(filepath.Dir(path), "github-login")
+	if err := os.Remove(loginPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func gitEnvironment(dir string) []string {
+	env := getEnv()
+	remoteCmd := exec.Command("git", "-C", dir, "remote", "get-url", "origin")
+	remoteCmd.Env = env
+	remoteOut, err := remoteCmd.Output()
+	if err != nil {
+		return env
+	}
+	remote, err := url.Parse(strings.TrimSpace(string(remoteOut)))
+	if err != nil || remote.Scheme != "https" || !strings.EqualFold(remote.Hostname(), "github.com") {
+		return env
+	}
+
+	tokenPath, err := githubTokenPath()
+	if err != nil {
+		return env
+	}
+	token, err := os.ReadFile(tokenPath)
+	if err != nil || strings.TrimSpace(string(token)) == "" {
+		return env
+	}
+
+	askpassPath := filepath.Join(filepath.Dir(tokenPath), "github-askpass")
+	const askpass = "#!/bin/sh\nprompt=$(printf '%s' \"$1\" | tr '[:upper:]' '[:lower:]')\ncase \"$prompt\" in\n  *username*) printf '%s\\n' 'x-access-token' ;;\n  *) cat \"$ASTRA_GITHUB_TOKEN_FILE\" ;;\nesac\n"
+	if err := os.WriteFile(askpassPath, []byte(askpass), 0700); err != nil {
+		return env
+	}
+	return setEnv(setEnv(setEnv(env, "GIT_ASKPASS", askpassPath), "GIT_TERMINAL_PROMPT", "0"), "ASTRA_GITHUB_TOKEN_FILE", tokenPath)
+}
+
+func setEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	for i, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
+}
+
 func cleanDir(dir string) (string, error) {
 	d := config.ExpandHome(strings.TrimSpace(dir))
 	if d == "" {
@@ -91,7 +243,7 @@ func runGitCmd(dir string, args ...string) (string, error) {
 	shArgs := append([]string{"-c", `exec git "$@"`, "git"}, args...)
 	cmd := exec.Command("sh", shArgs...)
 	cmd.Dir = resolvedDir
-	cmd.Env = getEnv()
+	cmd.Env = gitEnvironment(resolvedDir)
 
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out
@@ -120,7 +272,7 @@ func runGitDiffCmd(dir string, args ...string) (string, error) {
 	shArgs := append([]string{"-c", `exec git "$@"`, "git"}, args...)
 	cmd := exec.Command("sh", shArgs...)
 	cmd.Dir = resolvedDir
-	cmd.Env = getEnv()
+	cmd.Env = gitEnvironment(resolvedDir)
 
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out
