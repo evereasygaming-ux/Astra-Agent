@@ -107,15 +107,21 @@ class AgyController extends Notifier<AgyState> {
     state = state.copyWith(loading: true, clearError: true);
     try {
       await _api.startLogin();
-      await Future<void>.delayed(const Duration(seconds: 2));
-      final url = await _api.loginUrl();
-      state = state.copyWith(loginUrl: url, loading: false, clearError: true);
-      final target = url.url;
-      if (target != null && target.isNotEmpty) {
-        await _channel.openUrl(target);
-      } else if (url.active) {
-        state = state.copyWith(loading: false, error: 'Login URL expired. Tap sign-in again.');
+      for (var attempt = 0; attempt < 15; attempt++) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        final url = await _api.loginUrl();
+        state = state.copyWith(loginUrl: url);
+        final target = url.url;
+        if (target != null && target.isNotEmpty) {
+          state = state.copyWith(loading: false, clearError: true);
+          await _channel.openUrl(target);
+          return;
+        }
       }
+      state = state.copyWith(
+        loading: false,
+        error: 'AGY Hub did not provide a sign-in URL. Check bridge logs and retry.',
+      );
     } catch (error) {
       state = state.copyWith(loading: false, error: error.toString());
     }

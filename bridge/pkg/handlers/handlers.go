@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -28,6 +29,7 @@ import (
 	"gemini-server/pkg/hub"
 	"gemini-server/pkg/models"
 	"gemini-server/pkg/scanner"
+	"gemini-server/pkg/security"
 	"gemini-server/pkg/transcript"
 )
 
@@ -1977,8 +1979,28 @@ func (h *Handler) GetLoginURLHandler(w http.ResponseWriter, r *http.Request) {
 
 // StartLoginHandler sends a Login request to the AGY Hub RPC server.
 func (h *Handler) StartLoginHandler(w http.ResponseWriter, r *http.Request) {
+	if h.HubManager == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"success": false,
+			"error":   "AGY Hub is not available",
+		})
+		return
+	}
+	hubStatus, csrfToken, hubError, _ := h.HubManager.GetStatusInfo()
+	if hubStatus != hub.HubStatusOnline || csrfToken == "" {
+		message := "AGY Hub is not ready for sign-in"
+		if hubError != "" {
+			message += ": " + hubError
+		}
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"success": false,
+			"error":   message,
+		})
+		return
+	}
+
 	hubPort := "1235"
-	if h.HubManager != nil && h.HubManager.HubPort != "" {
+	if h.HubManager.HubPort != "" {
 		hubPort = h.HubManager.HubPort
 	}
 
@@ -1990,14 +2012,32 @@ func (h *Handler) StartLoginHandler(w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequest("POST", hubURL, strings.NewReader(`{"isGcpTos":false}`))
 	if err == nil {
 		req.Header.Set("Content-Type", "application/json")
-		client := &http.Client{Timeout: 5 * time.Second}
-		resp, postErr := client.Do(req)
-		if postErr == nil {
-			_ = resp.Body.Close()
-		}
+		req.Header.Set(
+			security.BuildFramedHeader(h.HubManager.SecurityToken),
+			csrfToken,
+		)
+		go func() {
+			client := &http.Client{Timeout: 5 * time.Minute}
+			resp, postErr := client.Do(req)
+			if postErr != nil {
+				log.Printf("[AGY Login] Hub request failed: %v", postErr)
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+				log.Printf("[AGY Login] Hub returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+			}
+		}()
+	} else {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+			"success": false,
+			"error":   "Could not create AGY Hub login request",
+		})
+		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusAccepted, map[string]interface{}{
 		"success": true,
 		"message": "Login initiated on AGY Hub",
 	})
