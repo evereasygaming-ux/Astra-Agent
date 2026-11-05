@@ -122,6 +122,9 @@
   pull. Pull requires a clean working tree and user confirmation; push is shown
   when there are unpushed commits. Flutter analysis passes; device sync validation
   is pending.
+- Git page now shows the latest 12 commits with per-commit file diffs, and lets
+  users switch or create local branches. Branch changes require a clean working
+  tree and confirmation; Flutter analysis passes and device validation is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

@@ -20,6 +20,8 @@ class GitScreen extends ConsumerStatefulWidget {
 
 class _GitScreenState extends ConsumerState<GitScreen> {
   List<_Project> _projects = [];
+  List<_GitBranch> _branches = [];
+  List<_GitCommit> _commits = [];
   String? _projectPath;
   _GitStatus? _status;
   String _remoteUrl = '';
@@ -117,20 +119,28 @@ class _GitScreenState extends ConsumerState<GitScreen> {
       });
     }
     try {
-      final json = await _request(
-        'GET',
-        '/api/git/status',
-        query: {'project': project},
-      );
-      final config = await _request(
-        'GET',
-        '/api/git/config',
-        query: {'project': project},
-      );
+      final responses = await Future.wait([
+        _request('GET', '/api/git/status', query: {'project': project}),
+        _request('GET', '/api/git/config', query: {'project': project}),
+        _request('GET', '/api/git/branches', query: {'project': project}),
+        _request(
+          'GET',
+          '/api/git/log',
+          query: {'project': project, 'limit': '12'},
+        ),
+      ]);
+      final json = responses[0];
+      final config = responses[1];
+      final branches = responses[2];
+      final history = responses[3];
       if (!mounted) return;
       setState(() {
         _status = _GitStatus.fromJson(json);
         _remoteUrl = config['remoteUrl']?.toString() ?? '';
+        _branches = _items(branches['branches'])
+            .map(_GitBranch.fromJson)
+            .toList();
+        _commits = _items(history['commits']).map(_GitCommit.fromJson).toList();
         _loading = false;
         _error = json['error']?.toString();
       });
@@ -150,6 +160,8 @@ class _GitScreenState extends ConsumerState<GitScreen> {
       _projectPath = path;
       _status = null;
       _remoteUrl = '';
+      _branches = [];
+      _commits = [];
     });
     await _loadStatus();
   }
@@ -356,6 +368,97 @@ class _GitScreenState extends ConsumerState<GitScreen> {
     }
   }
 
+  Future<void> _checkoutBranch(String? branch) async {
+    final status = _status;
+    if (branch == null ||
+        status == null ||
+        branch == status.branch ||
+        _hasLocalChanges(status)) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Switch branch?'),
+        content: Text('Switch from ${status.branch} to $branch?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Switch'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _perform(
+        'Switch branch',
+        '/api/git/checkout',
+        body: {'branch': branch},
+      );
+    }
+  }
+
+  Future<void> _createBranch() async {
+    final status = _status;
+    if (status == null || _hasLocalChanges(status)) return;
+    final branch = await showDialog<String>(
+      context: context,
+      builder: (context) => const _GitBranchDialog(),
+    );
+    if (branch == null || branch.trim().isEmpty || !mounted) return;
+    await _perform(
+      'Create branch',
+      '/api/git/branch/create',
+      body: {'branch': branch.trim(), 'create': true},
+    );
+  }
+
+  Future<void> _showCommitDetails(_GitCommit commit) async {
+    try {
+      final details = await _request(
+        'GET',
+        '/api/git/commit/details',
+        query: {'project': _projectPath ?? '', 'hash': commit.hash},
+      );
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => _CommitDetailsSheet(
+          commit: _GitCommitDetails.fromJson(details),
+          onFileTap: (file) => _showCommitDiff(commit.hash, file),
+        ),
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  Future<void> _showCommitDiff(String hash, _GitCommitFile file) async {
+    try {
+      final result = await _request(
+        'GET',
+        '/api/git/commit/diff',
+        query: {'project': _projectPath ?? '', 'hash': hash, 'file': file.path},
+      );
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => _CommitDiffSheet(
+          file: file,
+          diff: result['diff']?.toString() ?? '',
+        ),
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
   Future<void> _stageAll() => _perform('Stage all changes', '/api/git/stage');
 
   Future<void> _stage(_GitFile file) => _perform(
@@ -478,7 +581,13 @@ class _GitScreenState extends ConsumerState<GitScreen> {
                   else if (!status.isGitRepo)
                     _NotRepository(onInit: _busy ? null : _initRepository)
                   else ...[
-                    _BranchCard(status: status),
+                    _BranchCard(
+                      status: status,
+                      branches: _branches,
+                      canChange: !_busy && !_hasLocalChanges(status),
+                      onSelect: _checkoutBranch,
+                      onCreate: _createBranch,
+                    ),
                     const SizedBox(height: 8),
                     _RemoteCard(
                       remoteUrl: _remoteUrl,
@@ -607,6 +716,11 @@ class _GitScreenState extends ConsumerState<GitScreen> {
                         style: TextStyle(color: AppTheme.muted, fontSize: 12),
                       ),
                     ],
+                    const SizedBox(height: 16),
+                    _HistorySection(
+                      commits: _commits,
+                      onCommitTap: _showCommitDetails,
+                    ),
                   ],
                 ],
               ),
@@ -910,19 +1024,268 @@ Map<String, dynamic> _decodeOAuthResponse(http.Response response) {
 }
 
 class _BranchCard extends StatelessWidget {
-  const _BranchCard({required this.status});
+  const _BranchCard({
+    required this.status,
+    required this.branches,
+    required this.canChange,
+    required this.onSelect,
+    required this.onCreate,
+  });
 
   final _GitStatus status;
+  final List<_GitBranch> branches;
+  final bool canChange;
+  final ValueChanged<String?> onSelect;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final localBranches = branches.where((branch) => !branch.isRemote).toList();
+    final currentBranch =
+        localBranches.any((branch) => branch.name == status.branch)
+        ? status.branch
+        : null;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.account_tree_outlined, color: AppTheme.accent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButton<String>(
+                    value: currentBranch,
+                    isExpanded: true,
+                    underline: const SizedBox.shrink(),
+                    hint: Text(status.branch),
+                    items: localBranches
+                        .map(
+                          (branch) => DropdownMenuItem(
+                            value: branch.name,
+                            child: Text(
+                              branch.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: canChange ? onSelect : null,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Create branch',
+                  onPressed: canChange ? onCreate : null,
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 34, bottom: 4),
+              child: Text(
+                status.tracking.isNotEmpty
+                    ? '${status.tracking}  •  ${status.ahead} ahead, ${status.behind} behind'
+                    : canChange
+                    ? 'Local branch'
+                    : 'Commit or stash changes before switching branches',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistorySection extends StatelessWidget {
+  const _HistorySection({required this.commits, required this.onCommitTap});
+
+  final List<_GitCommit> commits;
+  final ValueChanged<_GitCommit> onCommitTap;
 
   @override
   Widget build(BuildContext context) => Card(
-    child: ListTile(
-      leading: const Icon(Icons.account_tree_outlined, color: AppTheme.accent),
-      title: Text(status.branch),
-      subtitle: Text(
-        status.tracking.isNotEmpty
-            ? '${status.tracking}  •  ${status.ahead} ahead, ${status.behind} behind'
-            : 'Current branch',
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+          child: Text(
+            'History (${commits.length})',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        if (commits.isEmpty)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Text(
+              'No commits yet.',
+              style: TextStyle(color: AppTheme.muted),
+            ),
+          )
+        else
+          ...commits.map(
+            (commit) => ListTile(
+              dense: true,
+              leading: Icon(
+                commit.isUnpushed ? Icons.upload_outlined : Icons.commit,
+                color: commit.isUnpushed ? AppTheme.accent : AppTheme.muted,
+              ),
+              title: Text(
+                commit.message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                '${commit.shortHash} • ${commit.author} • ${commit.date}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () => onCommitTap(commit),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class _CommitDetailsSheet extends StatelessWidget {
+  const _CommitDetailsSheet({required this.commit, required this.onFileTap});
+
+  final _GitCommitDetails commit;
+  final ValueChanged<_GitCommitFile> onFileTap;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * .78,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    commit.subject,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              '${commit.shortHash} • ${commit.author} • ${commit.date}',
+              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            ),
+          ),
+          if (commit.body.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text(commit.body),
+            ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Text(
+              'Changed files (${commit.files.length})',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(
+            child: commit.files.isEmpty
+                ? const Center(child: Text('No file changes recorded.'))
+                : ListView.builder(
+                    itemCount: commit.files.length,
+                    itemBuilder: (context, index) {
+                      final file = commit.files[index];
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.description_outlined),
+                        title: Text(
+                          file.path,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(file.status),
+                        onTap: () => onFileTap(file),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _CommitDiffSheet extends StatelessWidget {
+  const _CommitDiffSheet({required this.file, required this.diff});
+
+  final _GitCommitFile file;
+  final String diff;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * .82,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    file.path,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          Expanded(
+            child: diff.isEmpty
+                ? const Center(child: Text('No text diff available.'))
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    scrollDirection: Axis.horizontal,
+                    child: SelectableText(
+                      diff,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
       ),
     ),
   );
@@ -1135,6 +1498,44 @@ class _DiffSheet extends StatelessWidget {
   );
 }
 
+class _GitBranchDialog extends StatefulWidget {
+  const _GitBranchDialog();
+
+  @override
+  State<_GitBranchDialog> createState() => _GitBranchDialogState();
+}
+
+class _GitBranchDialogState extends State<_GitBranchDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Create branch'),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      autocorrect: false,
+      decoration: const InputDecoration(labelText: 'Branch name'),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _controller.text),
+        child: const Text('Create'),
+      ),
+    ],
+  );
+}
+
 class _CommitDialog extends StatefulWidget {
   const _CommitDialog();
 
@@ -1190,6 +1591,92 @@ class _Project {
 class _GitHubAccount {
   const _GitHubAccount(this.login);
   final String login;
+}
+
+class _GitBranch {
+  const _GitBranch({
+    required this.name,
+    required this.isCurrent,
+    required this.isRemote,
+  });
+
+  final String name;
+  final bool isCurrent;
+  final bool isRemote;
+
+  factory _GitBranch.fromJson(Map<dynamic, dynamic> json) => _GitBranch(
+    name: (json['name'] ?? '').toString(),
+    isCurrent: json['isCurrent'] == true,
+    isRemote: json['isRemote'] == true,
+  );
+}
+
+class _GitCommit {
+  const _GitCommit({
+    required this.hash,
+    required this.shortHash,
+    required this.author,
+    required this.date,
+    required this.message,
+    required this.isUnpushed,
+  });
+
+  final String hash;
+  final String shortHash;
+  final String author;
+  final String date;
+  final String message;
+  final bool isUnpushed;
+
+  factory _GitCommit.fromJson(Map<dynamic, dynamic> json) => _GitCommit(
+    hash: (json['hash'] ?? '').toString(),
+    shortHash: (json['shortHash'] ?? '').toString(),
+    author: (json['author'] ?? '').toString(),
+    date: (json['date'] ?? '').toString(),
+    message: (json['message'] ?? '').toString(),
+    isUnpushed: json['isUnpushed'] == true,
+  );
+}
+
+class _GitCommitFile {
+  const _GitCommitFile({required this.path, required this.status});
+  final String path;
+  final String status;
+
+  factory _GitCommitFile.fromJson(Map<dynamic, dynamic> json) => _GitCommitFile(
+    path: (json['path'] ?? '').toString(),
+    status: (json['status'] ?? '').toString(),
+  );
+}
+
+class _GitCommitDetails {
+  const _GitCommitDetails({
+    required this.shortHash,
+    required this.author,
+    required this.date,
+    required this.subject,
+    required this.body,
+    required this.files,
+  });
+
+  final String shortHash;
+  final String author;
+  final String date;
+  final String subject;
+  final String body;
+  final List<_GitCommitFile> files;
+
+  factory _GitCommitDetails.fromJson(Map<String, dynamic> json) =>
+      _GitCommitDetails(
+        shortHash: (json['shortHash'] ?? '').toString(),
+        author: (json['author'] ?? '').toString(),
+        date: (json['date'] ?? '').toString(),
+        subject: (json['subject'] ?? '').toString(),
+        body: (json['body'] ?? '').toString(),
+        files: _items(json['changedFiles'])
+            .map(_GitCommitFile.fromJson)
+            .toList(),
+      );
 }
 
 class _GitFile {
@@ -1260,6 +1747,9 @@ class _GitDiff {
     _intValue(json['deletions']),
   );
 }
+
+List<Map<dynamic, dynamic>> _items(Object? value) =>
+    value is List ? value.whereType<Map>().toList() : const [];
 
 List<_GitFile> _files(Object? value, {bool staged = false}) => value is List
     ? value

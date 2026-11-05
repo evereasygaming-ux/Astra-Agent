@@ -120,6 +120,8 @@ This status is a static source review. No build or tests were run for this plan.
   Go compilation pass; user confirmed OAuth sign-in works on device.
 - [x] Add GitHub origin setup, push, and pull. Pull is limited to a clean workspace;
   Flutter analysis passes; device sync validation pending.
+- [x] Add recent commit history with per-commit file diffs and local branch
+  switch/create controls. Flutter analysis passes; device validation pending.
 - Evaluate browser preview and MCP/plugin support after core workflows work.
 
 ### Phase 4 - Distribution
