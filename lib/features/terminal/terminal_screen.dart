@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../app/theme/app_theme.dart';
-import '../../bridge/presentation/bridge_controller.dart';
+import '../bridge/presentation/bridge_controller.dart';
 
 class TerminalScreen extends ConsumerStatefulWidget {
   const TerminalScreen({super.key});
@@ -73,11 +73,12 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       });
       await _connect();
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _error = 'Could not load workspaces: $error';
         });
+      }
     }
   }
 
@@ -105,18 +106,20 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       _subscription = socket.listen(
         _onFrame,
         onError: (Object error) {
-          if (mounted)
+          if (mounted) {
             setState(() {
               _connected = false;
               _error = 'Terminal connection failed: $error';
             });
+          }
         },
         onDone: () {
-          if (mounted)
+          if (mounted) {
             setState(() {
               _connected = false;
               _status = 'Disconnected';
             });
+          }
         },
       );
       socket.add(
@@ -136,7 +139,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       switch (message['type']) {
         case 'terminal_created':
           final terminal = message['terminal'];
-          if (mounted)
+          if (mounted) {
             setState(() {
               _connected = true;
               _status = terminal is Map
@@ -144,6 +147,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                   : 'Connected';
               _error = null;
             });
+          }
           break;
         case 'terminal_output':
           final data = message['data'];
@@ -165,17 +169,19 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
           }
           break;
         case 'terminal_error':
-          if (mounted)
+          if (mounted) {
             setState(
               () => _error = message['error']?.toString() ?? 'Terminal error',
             );
+          }
           break;
         case 'terminal_exit':
-          if (mounted)
+          if (mounted) {
             setState(() {
               _connected = false;
               _status = 'Shell exited';
             });
+          }
           break;
       }
     } catch (error) {
@@ -222,7 +228,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
           child: Column(
             children: [
               DropdownButtonFormField<String>(
-                value: _workspace,
+                initialValue: _workspace,
                 decoration: const InputDecoration(labelText: 'Workspace'),
                 items: _workspaces
                     .map(
