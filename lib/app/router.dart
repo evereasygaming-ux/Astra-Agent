@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/agy/presentation/agy_screen.dart';
 import '../features/claude/presentation/claude_screen.dart';
+import '../features/claude/presentation/chat_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/settings/settings_screen.dart';
 
@@ -13,6 +14,7 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const SettingsScreen(),
     ),
     GoRoute(path: '/claude', builder: (context, state) => const ClaudeScreen()),
+    GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
     GoRoute(path: '/agy', builder: (context, state) => const AgyScreen()),
   ],
 );

@@ -169,8 +169,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 _ActionCard(
                   icon: Icons.chat_bubble_outline,
                   title: 'Chat',
-                  subtitle: 'Claude Code',
-                  onTap: () => _comingSoon(context, 'Agent chat'),
+                  subtitle: 'Claude Code / Antigravity',
+                  onTap: () => context.push('/chat'),
                 ),
                 _ActionCard(
                   icon: Icons.terminal,
