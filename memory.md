@@ -135,11 +135,12 @@
   build output directories are excluded. Results include file and line context
   and open the matching file. Flutter analysis and Go build pass; device
   validation is pending.
-- Follow-up fixes remove the editor search dependency on ripgrep, add an explicit
-  workspace-folder registration flow, and save selected workspace ordering so it
-  remains the default. Chat now displays AGY command output and changed-file
+- Follow-up fixes remove the editor search dependency on ripgrep, add an in-app
+  existing-folder picker for workspaces, and save selected workspace ordering so
+  it remains the default. Chat now displays AGY command output and changed-file
   paths, blocks back navigation during active work, and exposes history as a
-  resume path. Flutter analysis and Go build pass; device validation is pending.
+  resume path. Chat selectors use full-width rows on narrow screens. Flutter
+  analysis and Go build pass; device validation is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

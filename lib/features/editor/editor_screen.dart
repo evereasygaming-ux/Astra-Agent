@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../../app/theme/app_theme.dart';
 import '../bridge/data/bridge_service.dart';
 import '../bridge/presentation/bridge_controller.dart';
+import 'workspace_folder_picker.dart';
 
 class EditorScreen extends ConsumerStatefulWidget {
   const EditorScreen({super.key});
@@ -178,13 +179,15 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   }
 
   Future<void> _addWorkspace() async {
-    final project = await showDialog<_Project>(
+    final bridge = ref.read(bridgeServiceProvider);
+    final path = await showDialog<String>(
       context: context,
-      builder: (context) => const _AddWorkspaceDialog(),
+      builder: (context) =>
+          WorkspaceFolderPicker(bridge: bridge, initialPath: _projectPath),
     );
-    if (project == null || !mounted) return;
+    if (path == null || !mounted) return;
+    final name = path.split('/').where((part) => part.isNotEmpty).last;
     try {
-      final bridge = ref.read(bridgeServiceProvider);
       final response = await http
           .post(
             await bridge.resolve('/api/projects/add'),
@@ -192,7 +195,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               ...await bridge.authHeaders(),
               'Content-Type': 'application/json',
             },
-            body: jsonEncode({'name': project.name, 'path': project.path}),
+            body: jsonEncode({'name': name, 'path': path}),
           )
           .timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) {
@@ -200,11 +203,11 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       }
       final responseData = jsonDecode(response.body);
       final resolvedPath = responseData is Map
-          ? responseData['path']?.toString() ?? project.path
-          : project.path;
+          ? responseData['path']?.toString() ?? path
+          : path;
       final resolvedName = responseData is Map
-          ? responseData['name']?.toString() ?? project.name
-          : project.name;
+          ? responseData['name']?.toString() ?? name
+          : name;
       final resolvedProject = _Project(resolvedName, resolvedPath);
       setState(() {
         _projects = [
@@ -898,74 +901,6 @@ class _FileEntry {
     path: value['path']?.toString() ?? '',
     isDirectory: value['isDir'] == true,
     size: int.tryParse(value['size']?.toString() ?? '') ?? 0,
-  );
-}
-
-class _AddWorkspaceDialog extends StatefulWidget {
-  const _AddWorkspaceDialog();
-
-  @override
-  State<_AddWorkspaceDialog> createState() => _AddWorkspaceDialogState();
-}
-
-class _AddWorkspaceDialogState extends State<_AddWorkspaceDialog> {
-  final _nameController = TextEditingController();
-  final _pathController = TextEditingController();
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _pathController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Add workspace folder'),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextField(
-          controller: _pathController,
-          autofocus: true,
-          autocorrect: false,
-          decoration: const InputDecoration(
-            labelText: 'Folder path',
-            hintText: '~/projects/my-app',
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _nameController,
-          decoration: const InputDecoration(
-            labelText: 'Workspace name (optional)',
-          ),
-        ),
-      ],
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: () {
-          final path = _pathController.text.trim();
-          if (path.isEmpty) return;
-          final name = _nameController.text.trim();
-          Navigator.pop(
-            context,
-            _Project(
-              name.isEmpty
-                  ? path.split('/').where((part) => part.isNotEmpty).last
-                  : name,
-              path,
-            ),
-          );
-        },
-        child: const Text('Add'),
-      ),
-    ],
   );
 }
 

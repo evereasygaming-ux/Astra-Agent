@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import '../../../app/theme/app_theme.dart';
 import '../../bridge/data/bridge_channel.dart';
 import '../../bridge/presentation/bridge_controller.dart';
+import '../../editor/workspace_folder_picker.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -165,13 +166,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Future<void> _addWorkspace() async {
-    final workspace = await showDialog<_Workspace>(
+    final bridge = ref.read(bridgeServiceProvider);
+    final path = await showDialog<String>(
       context: context,
-      builder: (context) => const _AddChatWorkspaceDialog(),
+      builder: (context) =>
+          WorkspaceFolderPicker(bridge: bridge, initialPath: _workspace),
     );
-    if (workspace == null || !mounted) return;
+    if (path == null || !mounted) return;
+    final name = path.split('/').where((part) => part.isNotEmpty).last;
     try {
-      final bridge = ref.read(bridgeServiceProvider);
       final response = await http
           .post(
             await bridge.resolve('/api/projects/add'),
@@ -179,7 +182,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ...await bridge.authHeaders(),
               'Content-Type': 'application/json',
             },
-            body: jsonEncode({'name': workspace.name, 'path': workspace.path}),
+            body: jsonEncode({'name': name, 'path': path}),
           )
           .timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) {
@@ -189,11 +192,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
       final body = jsonDecode(response.body);
       final resolvedPath = body is Map
-          ? body['path']?.toString() ?? workspace.path
-          : workspace.path;
+          ? body['path']?.toString() ?? path
+          : path;
       final resolvedName = body is Map
-          ? body['name']?.toString() ?? workspace.name
-          : workspace.name;
+          ? body['name']?.toString() ?? name
+          : name;
       final resolvedWorkspace = _Workspace(
         name: resolvedName,
         path: resolvedPath,
@@ -1082,75 +1085,70 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _agent,
-                          decoration: const InputDecoration(
-                            labelText: 'Agent',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'Claude Code',
-                              child: Text('Claude Code'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Antigravity',
-                              child: Text('Antigravity'),
-                            ),
-                          ],
-                          onChanged: _sending || _sessionId != null
-                              ? null
-                              : _selectAgent,
-                        ),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _agent,
+                    decoration: const InputDecoration(
+                      labelText: 'Agent',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Claude Code',
+                        child: Text('Claude Code'),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _loadingWorkspaces
-                            ? const LinearProgressIndicator()
-                            : DropdownButtonFormField<String>(
-                                initialValue: _workspace,
-                                decoration: InputDecoration(
-                                  labelText: 'Workspace',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  suffixIcon: IconButton(
-                                    tooltip: 'Add workspace folder',
-                                    onPressed: _sending || _sessionId != null
-                                        ? null
-                                        : _addWorkspace,
-                                    icon: const Icon(
-                                      Icons.create_new_folder_outlined,
-                                      size: 18,
-                                    ),
-                                  ),
-                                ),
-                                items: _workspaces
-                                    .map(
-                                      (item) => DropdownMenuItem(
-                                        value: item.path,
-                                        child: Text(
-                                          item.name,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: _sending || _sessionId != null
-                                    ? null
-                                    : _selectWorkspace,
-                              ),
+                      DropdownMenuItem(
+                        value: 'Antigravity',
+                        child: Text('Antigravity'),
                       ),
                     ],
+                    onChanged: _sending || _sessionId != null
+                        ? null
+                        : _selectAgent,
                   ),
+                  const SizedBox(height: 8),
+                  _loadingWorkspaces
+                      ? const LinearProgressIndicator()
+                      : DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: _workspace,
+                          decoration: InputDecoration(
+                            labelText: 'Workspace',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: IconButton(
+                              tooltip: 'Add workspace folder',
+                              onPressed: _sending || _sessionId != null
+                                  ? null
+                                  : _addWorkspace,
+                              icon: const Icon(
+                                Icons.create_new_folder_outlined,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                          items: _workspaces
+                              .map(
+                                (item) => DropdownMenuItem(
+                                  value: item.path,
+                                  child: Text(
+                                    item.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _sending || _sessionId != null
+                              ? null
+                              : _selectWorkspace,
+                        ),
                   if (_agent == 'Antigravity') ...[
                     const SizedBox(height: 8),
                     _loadingModels
                         ? const LinearProgressIndicator()
                         : DropdownButtonFormField<String>(
+                            isExpanded: true,
                             initialValue: _selectedModel,
                             decoration: InputDecoration(
                               labelText: 'Antigravity model',
@@ -1334,75 +1332,6 @@ class _Workspace {
   const _Workspace({required this.name, required this.path});
   final String name;
   final String path;
-}
-
-class _AddChatWorkspaceDialog extends StatefulWidget {
-  const _AddChatWorkspaceDialog();
-
-  @override
-  State<_AddChatWorkspaceDialog> createState() =>
-      _AddChatWorkspaceDialogState();
-}
-
-class _AddChatWorkspaceDialogState extends State<_AddChatWorkspaceDialog> {
-  final _nameController = TextEditingController();
-  final _pathController = TextEditingController();
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _pathController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Add workspace folder'),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextField(
-          controller: _pathController,
-          autofocus: true,
-          autocorrect: false,
-          decoration: const InputDecoration(
-            labelText: 'Folder path',
-            hintText: '~/projects/my-app',
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _nameController,
-          decoration: const InputDecoration(
-            labelText: 'Workspace name (optional)',
-          ),
-        ),
-      ],
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: () {
-          final path = _pathController.text.trim();
-          if (path.isEmpty) return;
-          final name = _nameController.text.trim();
-          Navigator.pop(
-            context,
-            _Workspace(
-              name: name.isEmpty
-                  ? path.split('/').where((part) => part.isNotEmpty).last
-                  : name,
-              path: path,
-            ),
-          );
-        },
-        child: const Text('Add'),
-      ),
-    ],
-  );
 }
 
 class _AgentModel {
