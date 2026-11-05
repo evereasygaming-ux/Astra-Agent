@@ -101,7 +101,8 @@ This status is a static source review. No build or tests were run for this plan.
 - [x] Add AGY permission/question cards and bridge-side interaction responses;
   the user confirmed approving a command card and seeing command output.
 - Add private on-device chat history with recent-conversation restore and
-  transcript previews; local implementation is present, device validation is
+  transcript previews; auto-restore latest history and lifecycle flush were
+  added after user reported history missing on reopen; device validation is
   pending.
 - Improve chat activity feedback, agent defaults, composer labels, and Home
   card sizing; local validation passes, device validation is pending.

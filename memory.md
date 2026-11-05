@@ -95,6 +95,10 @@
   hint follows the selected agent, long AGY turns show stage and elapsed time,
   and Home action cards constrain text to avoid overflow. Flutter analysis passes;
   device validation is pending.
+- User tested the new history build but reported no transcript after closing and
+  reopening the app. Chat now auto-restores the newest saved conversation on
+  entry, flushes history on Android app lifecycle changes and completed turns,
+  and surfaces load/save errors. Device validation of this correction is pending.
 - Attachments remain future work.
 
 ## Collaboration preferences

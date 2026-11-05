@@ -18,7 +18,8 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with WidgetsBindingObserver {
   final _prompt = TextEditingController();
   final _scroll = ScrollController();
   final List<_ChatMessage> _messages = [];
@@ -50,13 +51,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_loadWorkspaces());
     _historyReady = _loadHistory();
-    unawaited(_loadModels());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_subscription?.cancel());
     unawaited(_socket?.close());
     _historySaveTimer?.cancel();
@@ -65,6 +67,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _prompt.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _flushHistorySave();
+    }
   }
 
   Future<void> _loadWorkspaces() async {
@@ -129,7 +140,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 (item) =>
                     _SavedConversation.fromMap(Map<String, dynamic>.from(item)),
               )
-              .where((item) => item.id.isNotEmpty && item.messages.isNotEmpty)
+              .where(
+                (item) =>
+                    item.id.isNotEmpty &&
+                    item.workspace.isNotEmpty &&
+                    item.messages.isNotEmpty,
+              )
               .toList()
             ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       if (!mounted) return;
@@ -138,8 +154,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ..clear()
           ..addAll(history);
       });
-    } catch (_) {
-      // A missing or unreadable history file should not prevent chat use.
+      if (history.isNotEmpty) {
+        await _restoreConversation(history.first);
+      } else if (_agent == 'Antigravity') {
+        unawaited(_loadModels());
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Chat history could not load: $error');
+      }
+      if (_agent == 'Antigravity') unawaited(_loadModels());
     }
   }
 
@@ -150,6 +174,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       const Duration(milliseconds: 500),
       () => unawaited(_persistCurrentConversation()),
     );
+  }
+
+  void _flushHistorySave() {
+    _historySaveTimer?.cancel();
+    unawaited(_persistCurrentConversation());
   }
 
   Future<void> _persistCurrentConversation() async {
@@ -478,13 +507,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _error = data['error']?.toString();
         });
         _stopProgressTimer();
-        _scheduleHistorySave();
+        _flushHistorySave();
         return;
       }
       if (data['type'] == 'done') {
         setState(() => _sending = false);
         _stopProgressTimer();
-        _scheduleHistorySave();
+        _flushHistorySave();
         return;
       }
       if (data['type'] == 'interaction_resolved') {
@@ -527,7 +556,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           }
         });
         _stopProgressTimer();
-        _scheduleHistorySave();
+        _flushHistorySave();
         _scrollToBottom();
         return;
       }
