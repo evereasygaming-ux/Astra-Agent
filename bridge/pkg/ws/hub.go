@@ -152,7 +152,11 @@ func (h *Hub) ServeTerminalWS(w http.ResponseWriter, r *http.Request) {
 				_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": err.Error()})
 				continue
 			}
-			terminalID = stringValue(terminal["terminalId"])
+			terminalID, _ = terminal["terminalId"].(string)
+			if terminalID == "" {
+				_ = client.SendJSON(map[string]any{"type": "terminal_error", "error": "Antigravity returned an empty terminal ID"})
+				continue
+			}
 			_ = client.SendJSON(map[string]any{"type": "terminal_created", "terminal": terminal})
 			go h.streamTerminal(ctx, client, terminalID)
 
