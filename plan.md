@@ -127,6 +127,10 @@ This status is a static source review. No build or tests were run for this plan.
 - [x] Add project-wide literal code search to the workspace editor. Results show
   file, line, and matching text; tapping a result opens the file. Flutter analysis
   and Go build pass; device validation is pending.
+- [x] Remove the code-search dependency on an installed `rg` executable, allow
+  workspace add/select and remember the last selected folder, show AGY command
+  and file activity in chat, and keep chat open while a task is running.
+  Flutter analysis and Go build pass; device validation is pending.
 - Evaluate browser preview and MCP/plugin support after core workflows work.
 
 ### Phase 4 - Distribution

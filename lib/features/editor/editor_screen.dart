@@ -140,10 +140,85 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       _projectPath = path;
       _entries = [];
     });
+    unawaited(_rememberWorkspace(path));
     if (_searchMode && _searchController.text.trim().isNotEmpty) {
       await _search(_searchController.text);
     } else {
       await _loadDirectory(path);
+    }
+  }
+
+  Future<void> _rememberWorkspace(String path) async {
+    try {
+      final bridge = ref.read(bridgeServiceProvider);
+      final existing = _projects.where((project) => project.path == path);
+      final name = existing.isEmpty ? null : existing.first.name;
+      final response = await http
+          .post(
+            await bridge.resolve('/api/projects/add'),
+            headers: {
+              ...await bridge.authHeaders(),
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'name':
+                  name ?? path.split('/').where((part) => part.isNotEmpty).last,
+              'path': path,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        throw _EditorException(_responseError(response));
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Workspace choice was not saved: $error');
+      }
+    }
+  }
+
+  Future<void> _addWorkspace() async {
+    final project = await showDialog<_Project>(
+      context: context,
+      builder: (context) => const _AddWorkspaceDialog(),
+    );
+    if (project == null || !mounted) return;
+    try {
+      final bridge = ref.read(bridgeServiceProvider);
+      final response = await http
+          .post(
+            await bridge.resolve('/api/projects/add'),
+            headers: {
+              ...await bridge.authHeaders(),
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'name': project.name, 'path': project.path}),
+          )
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        throw _EditorException(_responseError(response));
+      }
+      final responseData = jsonDecode(response.body);
+      final resolvedPath = responseData is Map
+          ? responseData['path']?.toString() ?? project.path
+          : project.path;
+      final resolvedName = responseData is Map
+          ? responseData['name']?.toString() ?? project.name
+          : project.name;
+      final resolvedProject = _Project(resolvedName, resolvedPath);
+      setState(() {
+        _projects = [
+          resolvedProject,
+          ..._projects.where((item) => item.path != resolvedPath),
+        ];
+        _projectPath = resolvedPath;
+        _currentPath = resolvedPath;
+        _entries = [];
+        _error = null;
+      });
+      await _loadDirectory(resolvedPath);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
     }
   }
 
@@ -285,24 +360,37 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
           child: Column(
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: projectPath,
-                decoration: const InputDecoration(labelText: 'Workspace'),
-                items: _projects
-                    .map(
-                      (project) => DropdownMenuItem(
-                        value: project.path,
-                        child: Text(
-                          project.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _loadingProjects || _loadingDirectory
-                    ? null
-                    : _selectProject,
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: projectPath,
+                      decoration: const InputDecoration(labelText: 'Workspace'),
+                      items: _projects
+                          .map(
+                            (project) => DropdownMenuItem(
+                              value: project.path,
+                              child: Text(
+                                project.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _loadingProjects || _loadingDirectory
+                          ? null
+                          : _selectProject,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Add workspace folder',
+                    onPressed: _loadingProjects || _loadingDirectory
+                        ? null
+                        : _addWorkspace,
+                    icon: const Icon(Icons.create_new_folder_outlined),
+                  ),
+                ],
               ),
               if (_searchMode) ...[
                 const SizedBox(height: 8),
@@ -810,6 +898,74 @@ class _FileEntry {
     path: value['path']?.toString() ?? '',
     isDirectory: value['isDir'] == true,
     size: int.tryParse(value['size']?.toString() ?? '') ?? 0,
+  );
+}
+
+class _AddWorkspaceDialog extends StatefulWidget {
+  const _AddWorkspaceDialog();
+
+  @override
+  State<_AddWorkspaceDialog> createState() => _AddWorkspaceDialogState();
+}
+
+class _AddWorkspaceDialogState extends State<_AddWorkspaceDialog> {
+  final _nameController = TextEditingController();
+  final _pathController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _pathController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Add workspace folder'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: _pathController,
+          autofocus: true,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            labelText: 'Folder path',
+            hintText: '~/projects/my-app',
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _nameController,
+          decoration: const InputDecoration(
+            labelText: 'Workspace name (optional)',
+          ),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () {
+          final path = _pathController.text.trim();
+          if (path.isEmpty) return;
+          final name = _nameController.text.trim();
+          Navigator.pop(
+            context,
+            _Project(
+              name.isEmpty
+                  ? path.split('/').where((part) => part.isNotEmpty).last
+                  : name,
+              path,
+            ),
+          );
+        },
+        child: const Text('Add'),
+      ),
+    ],
   );
 }
 

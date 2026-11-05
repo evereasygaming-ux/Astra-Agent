@@ -9,12 +9,12 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	_ "modernc.org/sqlite"
@@ -1018,6 +1018,11 @@ func (h *Handler) ProjectsAddHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clean := filepath.Clean(expandHome(strings.TrimSpace(req.Path)))
+	info, err := os.Stat(clean)
+	if err != nil || !info.IsDir() {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Workspace path must be an existing folder."})
+		return
+	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = filepath.Base(clean)
@@ -1631,74 +1636,84 @@ func (h *Handler) FileSearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	args := []string{
-		"--json", "--line-number", "--fixed-strings", "--hidden", "--max-columns=1000",
-		"--max-columns-preview", "--glob", "!.git/**", "--glob", "!node_modules/**",
-		"--glob", "!build/**", "--glob", "!dist/**", "--glob", "!target/**",
-		"--", query, dir,
-	}
-	cmd := exec.CommandContext(ctx, "rg", args...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not start code search."})
-		return
-	}
-	if err := cmd.Start(); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Ripgrep (rg) is required for code search."})
-		return
-	}
-	type rgMessage struct {
-		Type string `json:"type"`
-		Data struct {
-			Path struct {
-				Text string `json:"text"`
-			} `json:"path"`
-			Lines struct {
-				Text string `json:"text"`
-			} `json:"lines"`
-			LineNumber int `json:"line_number"`
-		} `json:"data"`
-	}
+	started := time.Now()
+	needle := []byte(query)
 	matches := make([]models.SearchMatch, 0, limit)
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
 	truncated := false
-	for scanner.Scan() {
-		var message rgMessage
-		if json.Unmarshal(scanner.Bytes(), &message) != nil || message.Type != "match" {
-			continue
-		}
-		path := message.Data.Path.Text
-		relativePath, relErr := filepath.Rel(dir, path)
-		if relErr != nil {
-			relativePath = filepath.Base(path)
-		}
-		matches = append(matches, models.SearchMatch{
-			Path: path, RelativePath: filepath.ToSlash(relativePath),
-			LineNumber: message.Data.LineNumber,
-			LineText:   strings.TrimSpace(message.Data.Lines.Text),
-		})
-		if len(matches) >= limit {
-			truncated = true
-			_ = cmd.Process.Kill()
-			break
-		}
+	ignoredDirs := map[string]bool{
+		".git": true, "node_modules": true, "build": true, "dist": true,
+		"target": true, ".gradle": true, ".dart_tool": true, ".idea": true,
+		".next": true, "coverage": true, "Pods": true, ".venv": true,
+		"venv": true, "vendor": true,
 	}
-	scanErr := scanner.Err()
-	cmdErr := cmd.Wait()
-	if scanErr != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not read search results."})
-		return
+	const maxSearchFileBytes = 2 * 1024 * 1024
+	var errReachedLimit = fmt.Errorf("search result limit reached")
+	err = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if time.Since(started) > 18*time.Second {
+			return context.DeadlineExceeded
+		}
+		if entry.IsDir() {
+			if path != dir && ignoredDirs[entry.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		fileInfo, err := entry.Info()
+		if err != nil || !fileInfo.Mode().IsRegular() || fileInfo.Size() > maxSearchFileBytes {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil || len(content) > maxSearchFileBytes || !utf8.Valid(content) {
+			return nil
+		}
+		relativePath, err := filepath.Rel(dir, path)
+		if err != nil {
+			return nil
+		}
+		for lineNumber, line := range bytes.Split(content, []byte("\n")) {
+			column := bytes.Index(line, needle)
+			if column < 0 {
+				continue
+			}
+			lineText := strings.TrimSpace(string(line))
+			if len(lineText) > 1000 {
+				start := column - 300
+				if start < 0 {
+					start = 0
+				}
+				end := start + 1000
+				if end > len(line) {
+					end = len(line)
+				}
+				lineText = "…" + strings.TrimSpace(string(line[start:end])) + "…"
+			}
+			matches = append(matches, models.SearchMatch{
+				Path: path, RelativePath: filepath.ToSlash(relativePath),
+				LineNumber: lineNumber + 1, LineText: lineText,
+			})
+			if len(matches) >= limit {
+				truncated = true
+				return errReachedLimit
+			}
+		}
+		return nil
+	})
+	if errors.Is(err, errReachedLimit) {
+		err = nil
 	}
-	if ctx.Err() != nil && !truncated {
+	if errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
 		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "Code search took too long; try a narrower query."})
 		return
 	}
-	if cmdErr != nil && !truncated {
-		if exitErr, ok := cmdErr.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Code search failed."})
-			return
-		}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Code search failed."})
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"matches": matches, "truncated": truncated})
 }
