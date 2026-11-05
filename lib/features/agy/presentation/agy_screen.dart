@@ -13,15 +13,30 @@ class AgyScreen extends ConsumerStatefulWidget {
   ConsumerState<AgyScreen> createState() => _AgyScreenState();
 }
 
-class _AgyScreenState extends ConsumerState<AgyScreen> {
+class _AgyScreenState extends ConsumerState<AgyScreen>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(agyControllerProvider.notifier).refresh();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(agyControllerProvider.notifier).refresh();
+    }
   }
 
   @override
