@@ -47,16 +47,13 @@ class _StartupBrandOverlayState extends State<_StartupBrandOverlay>
     );
     _loadingProgress = CurvedAnimation(
       parent: _loadingController,
-      curve: Curves.easeInOutCubic,
+      curve: const Interval(0, 0.73, curve: Curves.easeInOutCubic),
     );
     _loadingController.addStatusListener((status) {
       if (status != AnimationStatus.completed || !mounted) return;
-      _removeTimer = Timer(const Duration(milliseconds: 600), () {
-        if (!mounted) return;
-        setState(() => _showSplash = false);
-        _removeTimer = Timer(const Duration(milliseconds: 300), () {
-          if (mounted) setState(() => _removeSplash = true);
-        });
+      setState(() => _showSplash = false);
+      _removeTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) setState(() => _removeSplash = true);
       });
     });
     _loadingController.forward();
