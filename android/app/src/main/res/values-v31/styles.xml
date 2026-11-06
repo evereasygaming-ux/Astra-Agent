@@ -2,7 +2,9 @@
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowSplashScreenBackground">@color/astra_code_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/astra_code_icon</item>
-        <item name="android:windowSplashScreenAnimationDuration">400</item>
+        <!-- The full splash artwork is rendered by Flutter; keep the system
+             splash blank so the old launcher icon cannot overlap it. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/astra_code_splash_blank</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
     </style>
 </resources>
