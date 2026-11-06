@@ -2,8 +2,6 @@ package com.astra.agent
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Bundle
-import android.view.ViewGroup
 import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -13,24 +11,6 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterActivity() {
     private val bridgeExecutor = Executors.newSingleThreadExecutor()
     private val installExecutor = Executors.newSingleThreadExecutor()
-    private var splashView: SplashView? = null
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        if (savedInstanceState != null) {
-            return
-        }
-        val content = findViewById<ViewGroup>(android.R.id.content) ?: return
-        val splash = SplashView(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            )
-        }
-        content.addView(splash)
-        splashView = splash
-        splash.start()
-    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -225,8 +205,6 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
-        splashView?.stop()
-        splashView = null
         if (isFinishing) {
             BridgeLauncher.stop()
             TermuxRunner.stopServer()

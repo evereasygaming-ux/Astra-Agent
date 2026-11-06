@@ -3,6 +3,6 @@
     <!-- LaunchTheme is defined in values/styles.xml so the v31 splash
          configuration in values-v31/styles.xml still applies in dark mode. -->
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
-        <item name="android:windowBackground">@color/astra_code_background</item>
+        <item name="android:windowBackground">@drawable/astra_splash_background</item>
     </style>
 </resources>
