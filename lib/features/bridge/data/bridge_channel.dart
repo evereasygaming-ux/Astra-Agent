@@ -118,4 +118,61 @@ class BridgeChannel {
     );
     return result?.cast<String, Object?>() ?? const {};
   }
+
+  Future<Map<String, Object?>> linuxStatus() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'linuxStatus',
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<Map<String, Object?>> linuxInstall() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'linuxInstall',
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<Map<String, Object?>> linuxInstallAgy() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'linuxInstallAgy',
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<Map<String, Object?>> linuxRun(
+    String command, {
+    int timeoutSeconds = 600,
+  }) async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'linuxRun',
+      {'command': command, 'timeoutSeconds': timeoutSeconds},
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<Map<String, Object?>> linuxStartBridge({
+    required String token,
+    required int port,
+    required int hubPort,
+    String? workspace,
+  }) async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'linuxStartBridge',
+      {
+        'token': token,
+        'port': port,
+        'hubPort': hubPort,
+        'workspace': workspace,
+      },
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
+
+  Future<Map<String, Object?>> linuxStopBridge() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      'linuxStopBridge',
+    );
+    return result?.cast<String, Object?>() ?? const {};
+  }
 }

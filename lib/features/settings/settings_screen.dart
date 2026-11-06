@@ -8,6 +8,7 @@ import '../bridge/data/bridge_channel.dart';
 import '../bridge/domain/bridge_config.dart';
 import '../bridge/presentation/bridge_controller.dart';
 import '../termux/termux_controller.dart';
+import 'linux_test_dialog.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -423,16 +424,18 @@ class SettingsScreen extends ConsumerWidget {
           ),
           _Section(
             title: 'Workspace',
-            children: const [
-              _Tile(
+            children: [
+              const _Tile(
                 icon: Icons.folder_outlined,
                 title: 'Project root',
                 subtitle: 'Not selected',
               ),
               _Tile(
-                icon: Icons.storage_outlined,
-                title: 'Linux environment',
-                subtitle: 'Rootfs install comes in Phase 3',
+                icon: Icons.terminal_outlined,
+                title: 'In-app Linux (Phase 0 test)',
+                subtitle: 'Debian proot, AGY, and bridge diagnostics',
+                trailing: 'Open',
+                onTap: () => showLinuxTestDialog(context),
               ),
             ],
           ),

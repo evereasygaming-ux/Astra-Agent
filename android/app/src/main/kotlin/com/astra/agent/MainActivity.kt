@@ -199,6 +199,91 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
+                    "linuxStatus" -> {
+                        try {
+                            result.success(LinuxRuntime.status(applicationContext))
+                        } catch (error: Exception) {
+                            result.error("linux_status_failed", error.message, null)
+                        }
+                    }
+
+                    "linuxInstall" -> installExecutor.execute {
+                        try {
+                            val status = LinuxRuntime.install(applicationContext)
+                            runOnUiThread { result.success(status) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error("linux_install_failed", error.message, null)
+                            }
+                        }
+                    }
+
+                    "linuxInstallAgy" -> installExecutor.execute {
+                        try {
+                            val status = LinuxRuntime.installAgy(applicationContext)
+                            runOnUiThread { result.success(status) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error("linux_agy_failed", error.message, null)
+                            }
+                        }
+                    }
+
+                    "linuxRun" -> installExecutor.execute {
+                        try {
+                            val command = call.argument<String>("command")
+                            val timeout = call.argument<Int>("timeoutSeconds") ?: 600
+                            if (command.isNullOrBlank()) {
+                                runOnUiThread {
+                                    result.error("bad_command", "command is required", null)
+                                }
+                            } else {
+                                val output = LinuxRuntime.runShell(
+                                    applicationContext,
+                                    command,
+                                    timeout,
+                                )
+                                runOnUiThread { result.success(output) }
+                            }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error("linux_run_failed", error.message, null)
+                            }
+                        }
+                    }
+
+                    "linuxStartBridge" -> bridgeExecutor.execute {
+                        try {
+                            val token = call.argument<String>("token")
+                            val port = call.argument<Int>("port") ?: 1234
+                            val hubPort = call.argument<Int>("hubPort") ?: 1235
+                            val workspace = call.argument<String>("workspace")
+                            val status = LinuxRuntime.startBridge(
+                                applicationContext,
+                                token,
+                                port,
+                                hubPort,
+                                workspace,
+                            )
+                            runOnUiThread { result.success(status) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error("linux_bridge_failed", error.message, null)
+                            }
+                        }
+                    }
+
+                    "linuxStopBridge" -> bridgeExecutor.execute {
+                        try {
+                            val status = LinuxRuntime.stopBridge()
+                            runOnUiThread { result.success(status) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error("linux_stop_failed", error.message, null)
+                            }
+                        }
+                    }
+
                     else -> result.notImplemented()
                 }
             }
@@ -207,6 +292,7 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         if (isFinishing) {
             BridgeLauncher.stop()
+            LinuxRuntime.stopBridge()
             TermuxRunner.stopServer()
             bridgeExecutor.shutdown()
         }

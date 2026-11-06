@@ -1,0 +1,20 @@
+Bundled Linux runtime helpers
+=============================
+
+proot
+  Source: https://github.com/termux/proot
+  License: GPL-2.0-or-later
+  Binary built by the Termux project.
+
+libtalloc.so.2
+  Source: https://github.com/samba-team/samba
+  License: LGPL-3.0-or-later
+  Binary built by the Termux project.
+
+libandroid-shmem.so
+  Source: https://github.com/termux/libandroid-shmem
+  License: Apache-2.0
+  Binary built by the Termux project.
+
+These files are unmodified copies from the Termux packages installed on the
+build host. See the upstream projects for the full license texts and sources.
