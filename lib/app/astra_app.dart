@@ -44,6 +44,7 @@ class _StartupBrandOverlayState extends State<_StartupBrandOverlay>
     _loadingController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
+      animationBehavior: AnimationBehavior.preserve,
     );
     _loadingProgress = CurvedAnimation(
       parent: _loadingController,
