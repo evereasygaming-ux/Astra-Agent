@@ -51,9 +51,12 @@ class _StartupBrandOverlayState extends State<_StartupBrandOverlay>
     );
     _loadingController.addStatusListener((status) {
       if (status != AnimationStatus.completed || !mounted) return;
-      setState(() => _showSplash = false);
-      _removeTimer = Timer(const Duration(milliseconds: 300), () {
-        if (mounted) setState(() => _removeSplash = true);
+      _removeTimer = Timer(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        setState(() => _showSplash = false);
+        _removeTimer = Timer(const Duration(milliseconds: 300), () {
+          if (mounted) setState(() => _removeSplash = true);
+        });
       });
     });
     _loadingController.forward();
