@@ -1,10 +1,9 @@
 {
-  "version_code": 1,
-  "version_name": "0.1.0",
+  "version_code": 2,
+  "version_name": "0.1.1",
   "changelog": [
-    "Initial AstraAgent Flutter scaffold",
-    "Package id com.astra.agent, minSdk 24, targetSdk 28",
-    "Debug APK build pipeline with Android 16 checks"
+    "Native full-artwork splash with animated progress",
+    "Splash renders reliably on cold start"
   ],
   "is_critical": false
 }
